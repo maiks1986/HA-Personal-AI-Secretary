@@ -58,6 +58,7 @@ async function bootstrap() {
         }
 
         console.log(`AUTH: Unauthenticated request to ${req.path}`);
+        console.log('DEBUG: Request Headers:', JSON.stringify(req.headers));
         (req as any).haUser = null;
         next();
     });

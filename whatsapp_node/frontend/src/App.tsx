@@ -82,7 +82,7 @@ const App = () => {
     const localToken = localStorage.getItem('direct_token');
     updateAxiosAuth(localToken);
     try {
-      const res = await axios.get('api/auth/status');
+      const res = await axios.get('/api/auth/status');
       if (res.data.authenticated) {
         setAuthState('authenticated');
         fetchInstances();
@@ -98,7 +98,7 @@ const App = () => {
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      const res = await axios.post('api/auth/login', { password });
+      const res = await axios.post('/api/auth/login', { password });
       localStorage.setItem('direct_token', res.data.token);
       updateAxiosAuth(res.data.token);
       setAuthState('authenticated');
@@ -139,28 +139,28 @@ const App = () => {
   }, [selectedChat]);
 
   const fetchInstances = async () => {
-    const res = await axios.get('api/instances');
+    const res = await axios.get('/api/instances');
     setInstances(res.data);
     if (res.data.length > 0 && !selectedInstance) setSelectedInstance(res.data[0]);
   };
 
   const fetchChats = async (instanceId: number) => {
-    const res = await axios.get(`api/chats/${instanceId}`);
+    const res = await axios.get(`/api/chats/${instanceId}`);
     setChats(res.data);
   };
 
   const fetchGeminiKey = async () => {
-    const res = await axios.get('api/settings/gemini_api_key');
+    const res = await axios.get('/api/settings/gemini_api_key');
     setGeminiKey(res.data.value);
   };
 
   const handleSaveSettings = async () => {
-    await axios.post('api/settings', { key: 'gemini_api_key', value: geminiKey });
+    await axios.post('/api/settings', { key: 'gemini_api_key', value: geminiKey });
     setIsSettingsOpen(false);
   };
 
   const fetchMessages = async (instanceId: number, jid: string) => {
-    const res = await axios.get(`api/messages/${instanceId}/${jid}`);
+    const res = await axios.get(`/api/messages/${instanceId}/${jid}`);
     setMessages(res.data);
     scrollToBottom();
     if (res.data.length > 0) analyzeIntent(res.data);
@@ -168,7 +168,7 @@ const App = () => {
 
   const analyzeIntent = async (msgs: Message[]) => {
     try {
-      const res = await axios.post('api/ai/analyze', { messages: msgs.slice(-20) });
+      const res = await axios.post('/api/ai/analyze', { messages: msgs.slice(-20) });
       setIntent(res.data.intent);
     } catch (e) {}
   };
@@ -177,7 +177,7 @@ const App = () => {
     if (messages.length === 0) return;
     setIsAiLoading(true);
     try {
-      const res = await axios.post('api/ai/draft', { 
+      const res = await axios.post('/api/ai/draft', { 
         messages: messages.slice(-10),
         steer: steerText 
       });
@@ -195,7 +195,7 @@ const App = () => {
 
   const handleCreateInstance = async () => {
     if (!newInstanceName) return;
-    await axios.post('api/instances', { name: newInstanceName });
+    await axios.post('/api/instances', { name: newInstanceName });
     setNewInstanceName('');
     setIsAddingInstance(false);
     fetchInstances();
@@ -207,7 +207,7 @@ const App = () => {
     
     setIsReseting(true);
     try {
-      await axios.delete(`api/instances/${selectedInstance.id}`);
+      await axios.delete(`/api/instances/${selectedInstance.id}`);
       setSelectedInstance(null);
       fetchInstances();
     } catch (e) {
@@ -220,7 +220,7 @@ const App = () => {
   const handleSendMessage = async () => {
     if (!inputText || !selectedInstance || !selectedChat) return;
     try {
-      await axios.post('api/send_message', {
+      await axios.post('/api/send_message', {
         instanceId: selectedInstance.id,
         contact: selectedChat.jid.split('@')[0],
         message: inputText

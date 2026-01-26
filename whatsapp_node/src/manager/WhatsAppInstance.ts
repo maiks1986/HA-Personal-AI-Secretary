@@ -24,6 +24,7 @@ export class WhatsAppInstance {
     private syncRetryCount: number = 0;
     private maxSyncRetries: number = 10;
     private watchdogTimer: NodeJS.Timeout | null = null;
+    private isReconnecting: boolean = false;
 
     constructor(id: number, name: string) {
         this.id = id;
@@ -34,6 +35,11 @@ export class WhatsAppInstance {
     }
 
     async init() {
+        if (this.sock) {
+            console.log(`Instance ${this.id}: Socket already exists, skipping init`);
+            return;
+        }
+
         const { state, saveCreds } = await useMultiFileAuthState(this.authPath);
         const { version } = await fetchLatestBaileysVersion();
 
@@ -75,12 +81,18 @@ export class WhatsAppInstance {
                 this.status = 'disconnected';
                 this.qr = null;
                 this.stopSyncWatchdog();
+                this.sock = null; // CRITICAL: Clear the socket reference on close
                 
                 db.prepare('UPDATE instances SET status = ? WHERE id = ?').run('disconnected', this.id);
                 
                 if (statusCode !== DisconnectReason.loggedOut) {
-                    console.log(`Instance ${this.id}: Unexpected close, reconnecting...`);
-                    setTimeout(() => this.init(), 5000);
+                    if (this.isReconnecting) return;
+                    this.isReconnecting = true;
+                    console.log(`Instance ${this.id}: Unexpected close, reconnecting in 5s...`);
+                    setTimeout(async () => {
+                        this.isReconnecting = false;
+                        await this.init();
+                    }, 5000);
                 }
             }
         });
@@ -176,6 +188,8 @@ export class WhatsAppInstance {
                 console.log(`Instance ${this.id}: Watchdog alert! No chats found in DB after 60s. Attempt ${this.syncRetryCount}/${this.maxSyncRetries}`);
                 
                 if (this.syncRetryCount < this.maxSyncRetries) {
+                    if (this.isReconnecting) return;
+                    this.isReconnecting = true;
                     console.log(`Instance ${this.id}: Triggering soft restart to force sync...`);
                     if (this.sock) {
                         try { 
@@ -183,7 +197,10 @@ export class WhatsAppInstance {
                             this.sock = null;
                         } catch (e) {}
                     }
-                    setTimeout(() => this.init(), 2000);
+                    setTimeout(async () => {
+                        this.isReconnecting = false;
+                        await this.init();
+                    }, 2000);
                 } else {
                     console.error(`Instance ${this.id}: Reached max sync retries. Please check if the account is actually active or try a Hard Reset.`);
                 }
