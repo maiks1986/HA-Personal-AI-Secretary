@@ -27,9 +27,15 @@ const sessions = new Map<string, { id: string, isAdmin: boolean }>();
 function getAddonConfig() {
     try {
         if (fs.existsSync(OPTIONS_PATH)) {
-            return JSON.parse(fs.readFileSync(OPTIONS_PATH, 'utf8'));
+            const data = fs.readFileSync(OPTIONS_PATH, 'utf8');
+            console.log('DEBUG: Raw Add-on Config:', data);
+            return JSON.parse(data);
+        } else {
+            console.log('DEBUG: Add-on config file NOT found at', OPTIONS_PATH);
         }
-    } catch (e) {}
+    } catch (e) {
+        console.error('DEBUG: Error reading add-on config:', e);
+    }
     return { password: "" };
 }
 

@@ -45,36 +45,27 @@ export class WhatsAppInstance {
         const { state, saveCreds } = await useMultiFileAuthState(this.authPath);
         const { version } = await fetchLatestBaileysVersion();
 
-        const logger = pino({ level: this.debugEnabled ? 'debug' : 'silent' }); 
+        const logger = pino({ level: this.debugEnabled ? 'debug' : 'info' }); 
 
         this.sock = makeWASocket({
             version,
             auth: state,
             printQRInTerminal: false,
             browser: Browsers.ubuntu('Chrome'),
-            syncFullHistory: true,
+            syncFullHistory: false, // Defaulting to false for better stability, only recent chats needed
             markOnlineOnConnect: true,
             connectTimeoutMs: 60000,
             defaultQueryTimeoutMs: 120000,
             logger: logger as any
         });
 
-        const evAny = this.sock.ev as any;
-
         if (this.debugEnabled) {
-            evAny.on('messaging-history.set', (payload: any) => {
-                console.log(`DEBUG: [HistorySet Raw] Keys: ${Object.keys(payload)}`);
-                if (payload.chats) console.log(`DEBUG: [HistorySet] Chat count: ${payload.chats.length}`);
-            });
-
-            // Log ALL incoming events for discovery
+            console.log(`Instance ${this.id}: Debug mode enabled. Listening for all events.`);
             this.sock.ev.process((events) => {
-                if (events['messaging-history.set']) console.log('DEBUG: Event -> messaging-history.set');
-                if ((events as any)['chats.set']) console.log('DEBUG: Event -> chats.set');
-                if (events['chats.upsert']) console.log('DEBUG: Event -> chats.upsert');
-                if (events['chats.update']) console.log('DEBUG: Event -> chats.update');
-                if ((events as any)['contacts.set']) console.log('DEBUG: Event -> contacts.set');
-                if (events['contacts.upsert']) console.log('DEBUG: Event -> contacts.upsert');
+                const eventNames = Object.keys(events);
+                if (eventNames.length > 0) {
+                    console.log(`DEBUG: [Events] ${eventNames.join(', ')}`);
+                }
             });
         }
 
@@ -129,22 +120,10 @@ export class WhatsAppInstance {
         `);
 
         this.sock.ev.on('messaging-history.set', (payload: any) => {
-            const { chats } = payload;
+            const { chats, contacts } = payload;
+            console.log(`Instance ${this.id}: [HistorySet] Payload received. Chats: ${chats?.length || 0}, Contacts: ${contacts?.length || 0}`);
+            
             if (chats && chats.length > 0) {
-                console.log(`Instance ${this.id}: [HistorySet] Received ${chats.length} chats. Sync successful.`);
-                this.syncRetryCount = 0; // Success! Reset counter
-                db.transaction(() => {
-                    for (const chat of chats) {
-                        upsertChat.run(this.id, chat.id, chat.name || chat.id.split('@')[0], chat.unreadCount || 0);
-                    }
-                })();
-            }
-        });
-
-        evAny.on('chats.set', (payload: any) => {
-            const { chats } = payload;
-            if (chats && chats.length > 0) {
-                console.log(`Instance ${this.id}: [ChatsSet] Received ${chats.length} chats.`);
                 this.syncRetryCount = 0;
                 db.transaction(() => {
                     for (const chat of chats) {
@@ -154,14 +133,25 @@ export class WhatsAppInstance {
             }
         });
 
-        evAny.on('chats.upsert', (chats: any[]) => {
+        this.sock.ev.on('chats.upsert', (chats: any[]) => {
+            if (this.debugEnabled) console.log(`Instance ${this.id}: [ChatsUpsert] ${chats.length} items`);
             if (chats.length > 0) this.syncRetryCount = 0;
             for (const chat of chats) {
-                upsertChat.run(this.id, chat.id, chat.name || chat.id.split('@')[0], 0);
+                upsertChat.run(this.id, chat.id, chat.name || chat.id.split('@')[0], chat.unreadCount || 0);
             }
         });
 
-        evAny.on('contacts.upsert', (contacts: any[]) => {
+        this.sock.ev.on('contacts.upsert', (contacts: any[]) => {
+            if (this.debugEnabled) console.log(`Instance ${this.id}: [ContactsUpsert] ${contacts.length} items`);
+            if (contacts.length > 0) this.syncRetryCount = 0;
+            for (const contact of contacts) {
+                upsertChat.run(this.id, contact.id, contact.name || contact.notify || contact.id.split('@')[0], 0);
+            }
+        });
+
+        this.sock.ev.on('contacts.set', (payload: any) => {
+            const contacts = payload.contacts || [];
+            if (this.debugEnabled) console.log(`Instance ${this.id}: [ContactsSet] ${contacts.length} items`);
             if (contacts.length > 0) this.syncRetryCount = 0;
             for (const contact of contacts) {
                 upsertChat.run(this.id, contact.id, contact.name || contact.notify || contact.id.split('@')[0], 0);
@@ -198,13 +188,14 @@ export class WhatsAppInstance {
 
     private startSyncWatchdog() {
         this.stopSyncWatchdog();
+        // Increased to 5 minutes to allow for large history syncs
         this.watchdogTimer = setTimeout(async () => {
             const row = db.prepare('SELECT COUNT(*) as count FROM chats WHERE instance_id = ?').get(this.id) as any;
             const chatCount = row?.count || 0;
 
             if (chatCount === 0) {
                 this.syncRetryCount++;
-                console.log(`Instance ${this.id}: Watchdog alert! No chats found in DB after 60s. Attempt ${this.syncRetryCount}/${this.maxSyncRetries}`);
+                console.log(`Instance ${this.id}: Watchdog alert! No chats found in DB after 300s. Attempt ${this.syncRetryCount}/${this.maxSyncRetries}`);
                 
                 if (this.syncRetryCount < this.maxSyncRetries) {
                     if (this.isReconnecting) return;
@@ -219,14 +210,14 @@ export class WhatsAppInstance {
                     setTimeout(async () => {
                         this.isReconnecting = false;
                         await this.init();
-                    }, 2000);
+                    }, 5000);
                 } else {
                     console.error(`Instance ${this.id}: Reached max sync retries. Please check if the account is actually active or try a Hard Reset.`);
                 }
             } else {
                 console.log(`Instance ${this.id}: Watchdog satisfied. Found ${chatCount} chats in database.`);
             }
-        }, 60000); // Wait 60 seconds for data to start flowing
+        }, 300000); 
     }
 
     private stopSyncWatchdog() {
