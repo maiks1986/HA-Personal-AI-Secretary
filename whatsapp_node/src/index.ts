@@ -124,7 +124,8 @@ async function bootstrap() {
         const chats = db.prepare(`
             SELECT * FROM chats 
             WHERE instance_id = ? 
-            ORDER BY COALESCE(last_message_timestamp, '0000-00-00') DESC, jid ASC
+              AND (last_message_text IS NOT NULL OR unread_count > 0 OR name != jid)
+            ORDER BY last_message_timestamp DESC
         `).all(instanceId);
         console.log(`API: Returning ${chats.length} chats`);
         res.json(chats);
