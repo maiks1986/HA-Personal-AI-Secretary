@@ -43,6 +43,7 @@ async function bootstrap() {
         const isAdmin = req.headers['x-hass-is-admin'] === '1' || req.headers['x-hass-is-admin'] === 'true';
         
         if (userId) {
+            console.log(`AUTH: User ${userId} authenticated via Ingress (Admin: ${isAdmin})`);
             (req as any).haUser = { id: userId, isAdmin, source: 'ingress' };
             return next();
         }
@@ -51,10 +52,12 @@ async function bootstrap() {
         const token = authHeader?.split(' ')[1];
         if (token && sessions.has(token)) {
             const session = sessions.get(token);
+            console.log(`AUTH: User ${session!.id} authenticated via Direct Token`);
             (req as any).haUser = { id: session!.id, isAdmin: session!.isAdmin, source: 'direct' };
             return next();
         }
 
+        console.log(`AUTH: Unauthenticated request to ${req.path}`);
         (req as any).haUser = null;
         next();
     });
