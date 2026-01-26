@@ -11,7 +11,10 @@ import {
   CircleDot,
   Search,
   MoreVertical,
-  X
+  X,
+  Settings,
+  BrainCircuit,
+  Eraser
 } from 'lucide-react';
 
 const socket = io();
@@ -38,13 +41,18 @@ const App = () => {
   const [messages, setMessages] = useState<Message[]>([]);
   const [inputText, setInputText] = useState('');
   const [steerText, setSteerText] = useState('');
+  const [intent, setIntent] = useState<string | null>(null);
   const [isAddingInstance, setIsAddingInstance] = useState(false);
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [geminiKey, setGeminiKey] = useState('');
   const [newInstanceName, setNewInstanceName] = useState('');
+  const [isAiLoading, setIsAiLoading] = useState(false);
   
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     fetchInstances();
+    fetchGeminiKey();
     
     socket.on('instances_status', (statusUpdates: any[]) => {
       setInstances(prev => prev.map(inst => {
@@ -60,9 +68,10 @@ const App = () => {
 
   useEffect(() => {
     if (selectedInstance && selectedInstance.status === 'connected') {
-      // For simplicity, we fetch all messages for the "Me" chat or similar
-      // In full version, we'd have a Chat List selection
       fetchMessages(selectedInstance.id, '31657349267@s.whatsapp.net'); 
+    } else {
+      setMessages([]);
+      setIntent(null);
     }
   }, [selectedInstance]);
 
@@ -74,14 +83,51 @@ const App = () => {
     }
   };
 
+  const fetchGeminiKey = async () => {
+    const res = await axios.get('/api/settings/gemini_api_key');
+    setGeminiKey(res.data.value);
+  };
+
+  const handleSaveSettings = async () => {
+    await axios.post('/api/settings', { key: 'gemini_api_key', value: geminiKey });
+    setIsSettingsOpen(false);
+  };
+
   const fetchMessages = async (instanceId: number, jid: string) => {
     const res = await axios.get(`/api/messages/${instanceId}/${jid}`);
     setMessages(res.data);
     scrollToBottom();
+    // Auto-analyze intent if we have messages
+    if (res.data.length > 0) analyzeIntent(res.data);
+  };
+
+  const analyzeIntent = async (msgs: Message[]) => {
+    try {
+      const res = await axios.post('/api/ai/analyze', { messages: msgs.slice(-20) });
+      setIntent(res.data.intent);
+    } catch (e) {}
+  };
+
+  const handleAiDraft = async () => {
+    if (messages.length === 0) return;
+    setIsAiLoading(true);
+    try {
+      const res = await axios.post('/api/ai/draft', { 
+        messages: messages.slice(-10),
+        steer: steerText 
+      });
+      setInputText(res.data.draft);
+    } catch (e) {
+      alert("AI Service unavailable. Check your API key in Settings.");
+    } finally {
+      setIsAiLoading(false);
+    }
   };
 
   const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    setTimeout(() => {
+      messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    }, 100);
   };
 
   const handleCreateInstance = async () => {
@@ -97,11 +143,11 @@ const App = () => {
     try {
       await axios.post('/api/send_message', {
         instanceId: selectedInstance.id,
-        contact: '31657349267', // Hardcoded for prototype
+        contact: '31657349267',
         message: inputText
       });
       setInputText('');
-      // Refresh local view immediately
+      setSteerText('');
       fetchMessages(selectedInstance.id, '31657349267@s.whatsapp.net');
     } catch (e) {
       alert("Failed to send");
@@ -110,7 +156,7 @@ const App = () => {
 
   return (
     <div className="flex h-screen bg-whatsapp-bg overflow-hidden text-slate-800">
-      {/* Sidebar: Instance List */}
+      {/* Sidebar */}
       <div className="w-80 bg-white border-r border-slate-200 flex flex-col">
         <div className="p-4 bg-slate-50 flex justify-between items-center border-b">
           <div className="flex items-center gap-2">
@@ -119,12 +165,14 @@ const App = () => {
             </div>
             <h2 className="font-bold">Accounts</h2>
           </div>
-          <button 
-            onClick={() => setIsAddingInstance(true)}
-            className="p-2 hover:bg-slate-200 rounded-full transition-colors"
-          >
-            <Plus size={20} />
-          </button>
+          <div className="flex gap-1">
+            <button onClick={() => setIsSettingsOpen(true)} className="p-2 hover:bg-slate-200 rounded-full transition-colors">
+              <Settings size={20} className="text-slate-500" />
+            </button>
+            <button onClick={() => setIsAddingInstance(true)} className="p-2 hover:bg-slate-200 rounded-full transition-colors">
+              <Plus size={20} />
+            </button>
+          </div>
         </div>
 
         <div className="flex-1 overflow-y-auto">
@@ -149,19 +197,18 @@ const App = () => {
         </div>
       </div>
 
-      {/* Main Content: Chat View */}
+      {/* Main Content */}
       <div className="flex-1 flex flex-col relative">
         {selectedInstance ? (
           <>
-            {/* Chat Header */}
-            <header className="p-4 bg-slate-50 border-b flex justify-between items-center">
+            <header className="p-4 bg-slate-50 border-b flex justify-between items-center shadow-sm z-10">
               <div className="flex items-center gap-3">
-                <div className="w-10 h-10 bg-slate-300 rounded-full flex items-center justify-center">
-                  <CircleDot size={20} />
+                <div className="w-10 h-10 bg-slate-300 rounded-full flex items-center justify-center overflow-hidden">
+                  <CircleDot size={24} className="text-slate-500" />
                 </div>
                 <div>
-                  <h3 className="font-bold">{selectedInstance.name}</h3>
-                  <p className="text-xs text-green-600">{selectedInstance.status}</p>
+                  <h3 className="font-bold leading-tight">{selectedInstance.name}</h3>
+                  {intent && <span className="text-[10px] bg-teal-100 text-teal-700 px-2 py-0.5 rounded-full font-medium">Intent: {intent}</span>}
                 </div>
               </div>
               <div className="flex items-center gap-4 text-slate-500">
@@ -170,63 +217,65 @@ const App = () => {
               </div>
             </header>
 
-            {/* Message Area */}
-            <div className="flex-1 overflow-y-auto p-6 flex flex-col gap-2 bg-[#efeae2]">
+            <div className="flex-1 overflow-y-auto p-6 flex flex-col gap-2 bg-[#efeae2] bg-[url('https://user-images.githubusercontent.com/15075759/28719144-86dc0f70-73b1-11e7-911d-60d70fcded21.png')] bg-repeat">
               {selectedInstance.status === 'qr_ready' && selectedInstance.qr && (
-                <div className="bg-white p-8 rounded-lg shadow-md mx-auto my-10 text-center max-w-sm">
-                  <h2 className="text-xl font-bold mb-4">Link this account</h2>
-                  <p className="text-sm text-slate-600 mb-6">Scan the QR code with your phone to start.</p>
-                  <img src={selectedInstance.qr} className="mx-auto border p-2 bg-white" />
+                <div className="bg-white p-8 rounded-lg shadow-md mx-auto my-10 text-center max-w-sm border-t-4 border-teal-600">
+                  <h2 className="text-xl font-bold mb-2 text-slate-800">Link your device</h2>
+                  <p className="text-sm text-slate-500 mb-6 font-medium">1. Open WhatsApp on your phone<br/>2. Tap Settings > Linked Devices<br/>3. Point your phone to this screen</p>
+                  <div className="p-2 bg-white rounded-lg border-2 border-slate-100 shadow-inner inline-block">
+                    <img src={selectedInstance.qr} className="w-64 h-64" />
+                  </div>
                 </div>
               )}
 
               {messages.map((m) => (
                 <div 
                   key={m.id} 
-                  className={`max-w-[70%] p-2 px-3 rounded-lg shadow-sm text-sm relative ${m.is_from_me ? 'bg-whatsapp-bubble self-end' : 'bg-white self-start'}`}
+                  className={`max-w-[75%] p-2 px-3 rounded-lg shadow-sm text-sm relative animate-in fade-in slide-in-from-bottom-1 duration-200 ${m.is_from_me ? 'bg-whatsapp-bubble self-end' : 'bg-white self-start'}`}
                 >
-                  <div className="mb-1">{m.text}</div>
-                  <div className="text-[10px] text-slate-400 text-right">{new Date(m.timestamp).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</div>
+                  <div className="leading-relaxed whitespace-pre-wrap">{m.text}</div>
+                  <div className="text-[9px] text-slate-400 text-right mt-1 font-medium">{new Date(m.timestamp).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</div>
                 </div>
               ))}
               <div ref={messagesEndRef} />
             </div>
 
-            {/* Input Area */}
-            <footer className="p-3 bg-slate-50 border-t flex flex-col gap-2">
-              {/* AI Steering Row */}
-              <div className="flex gap-2 items-center px-2">
-                <Sparkles size={16} className="text-teal-600" />
+            <footer className="p-3 bg-slate-100 border-t flex flex-col gap-2 shadow-[0_-2px_10px_rgba(0,0,0,0.05)]">
+              <div className="flex gap-2 items-center bg-white/50 p-1 px-2 rounded-lg border border-slate-200">
+                <Sparkles size={14} className="text-teal-600 shrink-0" />
                 <input 
                   value={steerText}
                   onChange={(e) => setSteerText(e.target.value)}
-                  placeholder="Steer AI: e.g. 'Be more professional' or 'Say goodbye'"
-                  className="flex-1 bg-transparent text-xs outline-none border-b border-transparent focus:border-teal-600 p-1"
+                  placeholder="Tell AI how to reply (e.g. 'Say no politely', 'Use emojis')"
+                  className="flex-1 bg-transparent text-[11px] outline-none p-1 font-medium italic"
                 />
+                <button 
+                  disabled={isAiLoading}
+                  onClick={handleAiDraft}
+                  className="text-[10px] bg-teal-600 text-white px-3 py-1 rounded-md font-bold hover:bg-teal-700 disabled:bg-slate-300 transition-all flex items-center gap-1"
+                >
+                  {isAiLoading ? <RefreshCw size={10} className="spin" /> : <BrainCircuit size={10} />}
+                  DRAFT REPLY
+                </button>
               </div>
 
-              {/* Text Input Row */}
-              <div className="flex items-center gap-3">
-                <button 
-                  onClick={() => setInputText('')}
-                  className="p-2 text-slate-500 hover:text-red-500 transition-colors"
-                  title="Clear"
-                >
-                  <Trash2 size={20} />
+              <div className="flex items-center gap-2">
+                <button onClick={() => setInputText('')} className="p-2 text-slate-400 hover:text-red-500 transition-all hover:bg-red-50 rounded-full" title="Clear Text">
+                  <Eraser size={22} />
                 </button>
-                <div className="flex-1 bg-white rounded-lg flex items-center px-3 py-1 border border-slate-200 shadow-sm focus-within:border-teal-500">
+                <div className="flex-1 bg-white rounded-xl flex items-center px-4 py-2 border border-slate-200 shadow-inner focus-within:ring-2 ring-teal-500/20">
                   <textarea 
                     value={inputText}
                     onChange={(e) => setInputText(e.target.value)}
                     placeholder="Type a message..."
-                    className="flex-1 outline-none resize-none max-h-32 text-sm py-1"
+                    className="flex-1 outline-none resize-none max-h-32 text-sm py-1 bg-transparent"
                     rows={1}
                     onKeyDown={(e) => e.key === 'Enter' && !e.shiftKey && (e.preventDefault(), handleSendMessage())}
                   />
                 </div>
                 <button 
                   onClick={handleSendMessage}
-                  className="bg-teal-600 text-white p-2 rounded-full hover:bg-teal-700 transition-colors shadow-sm"
+                  className="bg-teal-600 text-white p-3 rounded-full hover:bg-teal-700 transition-all shadow-md active:scale-95"
                 >
                   <Send size={20} />
                 </button>
@@ -234,33 +283,67 @@ const App = () => {
             </footer>
           </>
         ) : (
-          <div className="flex-1 flex flex-center items-center justify-center bg-slate-100 flex-col gap-4">
-            <div className="w-24 h-24 bg-slate-200 rounded-full flex items-center justify-center">
-              <RefreshCw size={48} className="text-slate-400" />
+          <div className="flex-1 flex items-center justify-center bg-[#f0f2f5] flex-col gap-6">
+            <div className="w-32 h-32 bg-slate-200 rounded-full flex items-center justify-center border-8 border-white shadow-sm">
+              <RefreshCw size={64} className="text-slate-400" />
             </div>
-            <h2 className="text-xl font-light text-slate-500 text-center">Select an account to start chatting<br/><span className="text-sm">Everything stays safe in your private database.</span></h2>
+            <div className="text-center">
+              <h2 className="text-2xl font-light text-slate-600 mb-2">Select an account to start chatting</h2>
+              <p className="text-slate-400 text-sm max-w-xs">Connecting you to your personal AI-powered WhatsApp Command Center.</p>
+            </div>
           </div>
         )}
       </div>
 
+      {/* Settings Modal */}
+      {isSettingsOpen && (
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-[100] backdrop-blur-sm">
+          <div className="bg-white p-8 rounded-2xl shadow-2xl w-[400px] border border-slate-100">
+            <div className="flex justify-between items-center mb-6">
+              <h3 className="font-bold text-xl flex items-center gap-2 text-slate-800"><Settings className="text-slate-400" /> Settings</h3>
+              <button onClick={() => setIsSettingsOpen(false)} className="text-slate-400 hover:text-slate-600"><X size={24} /></button>
+            </div>
+            <div className="space-y-4">
+              <div>
+                <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Gemini API Key</label>
+                <input 
+                  type="password"
+                  value={geminiKey}
+                  onChange={(e) => setGeminiKey(e.target.value)}
+                  placeholder="Paste your key here..."
+                  className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:border-teal-500 focus:bg-white transition-all text-sm"
+                />
+                <p className="text-[10px] text-slate-400 mt-2">Get a free key at <a href="https://aistudio.google.com/" target="_blank" className="text-teal-600 underline">Google AI Studio</a></p>
+              </div>
+              <button 
+                onClick={handleSaveSettings}
+                className="w-full bg-teal-600 text-white p-3 rounded-xl font-bold hover:bg-teal-700 shadow-lg shadow-teal-600/20 transition-all mt-4"
+              >
+                Apply Settings
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* New Instance Modal */}
       {isAddingInstance && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div className="bg-white p-6 rounded-xl shadow-xl w-80">
-            <div className="flex justify-between items-center mb-4">
-              <h3 className="font-bold text-lg">Add New Account</h3>
-              <button onClick={() => setIsAddingInstance(false)}><X size={20} /></button>
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-[100] backdrop-blur-sm">
+          <div className="bg-white p-8 rounded-2xl shadow-2xl w-80 border border-slate-100">
+            <div className="flex justify-between items-center mb-6">
+              <h3 className="font-bold text-xl text-slate-800">New Account</h3>
+              <button onClick={() => setIsAddingInstance(false)} className="text-slate-400 hover:text-slate-600"><X size={24} /></button>
             </div>
             <input 
               autoFocus
               value={newInstanceName}
               onChange={(e) => setNewInstanceName(e.target.value)}
-              placeholder="Display Name (e.g. Work)"
-              className="w-full p-2 border rounded-lg mb-4 outline-teal-600"
+              placeholder="e.g. Personal, Work..."
+              className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:border-teal-500 focus:bg-white transition-all text-sm mb-6"
             />
             <button 
               onClick={handleCreateInstance}
-              className="w-full bg-teal-600 text-white p-2 rounded-lg font-bold hover:bg-teal-700"
+              className="w-full bg-teal-600 text-white p-3 rounded-xl font-bold hover:bg-teal-700 shadow-lg shadow-teal-600/20 transition-all"
             >
               Start Connection
             </button>

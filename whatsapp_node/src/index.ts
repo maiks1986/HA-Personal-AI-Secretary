@@ -6,6 +6,7 @@ import path from 'path';
 import fs from 'fs';
 import db, { initDatabase } from './db/database';
 import { engineManager } from './manager/EngineManager';
+import { aiService } from './services/AiService';
 
 const app = express();
 const server = http.createServer(app);
@@ -63,6 +64,33 @@ async function bootstrap() {
         } catch (e: any) {
             res.status(500).json({ error: e.message });
         }
+    });
+
+    // Settings management
+    app.post('/api/settings', (req, res) => {
+        const { key, value } = req.body;
+        db.prepare('INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)').run(key, value);
+        if (key === 'gemini_api_key') aiService.reset();
+        res.json({ success: true });
+    });
+
+    app.get('/api/settings/:key', (req, res) => {
+        const row = db.prepare('SELECT value FROM settings WHERE key = ?').get(req.params.key) as any;
+        res.json({ value: row?.value || "" });
+    });
+
+    // AI Analysis
+    app.post('/api/ai/analyze', async (req, res) => {
+        const { messages } = req.body;
+        const intent = await aiService.analyzeIntent(messages);
+        res.json({ intent });
+    });
+
+    // AI Draft
+    app.post('/api/ai/draft', async (req, res) => {
+        const { messages, steer } = req.body;
+        const draft = await aiService.generateDraft(messages, steer);
+        res.json({ draft });
     });
 
     // 4. WebSocket for real-time status/messages
