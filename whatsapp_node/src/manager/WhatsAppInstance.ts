@@ -64,11 +64,44 @@ export class WhatsAppInstance {
                 VALUES (?, ?, ?, ?, ?, ?, ?)
             `);
 
-            this.sock.ev.process(async (events) => {
-                // ... (connection and creds logic remains same)
+            if (this.sock) {
+                this.sock.ev.process(async (events: any) => {
+                    if (events['connection.update']) {
+                        const update = events['connection.update'];
+                        const { connection, lastDisconnect, qr } = update;
+                        if (qr) {
+                            this.qr = await qrcode.toDataURL(qr);
+                            this.status = 'qr_ready';
+                        }
+                        if (connection === 'open') {
+                            console.log(`TRACE [Instance ${this.id}]: Connection OPEN`);
+                            this.status = 'connected';
+                            this.qr = null;
+                            db.prepare('UPDATE instances SET status = ? WHERE id = ?').run('connected', this.id);
+                            this.startSyncWatchdog();
+                        }
+                        if (connection === 'close') {
+                            const statusCode = (lastDisconnect?.error as Boom)?.output?.statusCode;
+                            this.status = 'disconnected';
+                            this.sock = null;
+                            this.stopSyncWatchdog();
+                            db.prepare('UPDATE instances SET status = ? WHERE id = ?').run('disconnected', this.id);
+                            if (statusCode === DisconnectReason.loggedOut) {
+                                console.log(`TRACE [Instance ${this.id}]: Session logged out. Clearing auth and forcing new QR...`);
+                                await this.deleteAuth();
+                                await this.init();
+                            } else {
+                                if (this.isReconnecting) return;
+                                this.isReconnecting = true;
+                                setTimeout(async () => { this.isReconnecting = false; await this.init(); }, 5000);
+                            }
+                        }
+                    }
 
-                // Aggressive Chat & Message Discovery
-                if (events['messaging-history.set']) {
+                    if (events['creds.update']) saveCreds();
+
+                    // Aggressive Chat & Message Discovery
+                    if (events['messaging-history.set']) {
                     const { chats, contacts, messages } = events['messaging-history.set'];
                     console.log(`TRACE [Instance ${this.id}]: History Set -> Chats: ${chats?.length || 0}, Contacts: ${contacts?.length || 0}, Messages: ${messages?.length || 0}`);
                     
