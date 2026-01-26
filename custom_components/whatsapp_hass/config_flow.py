@@ -28,8 +28,6 @@ class WhatsAppConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 }),
             )
 
-        from .whatsapp_web_client import WhatsAppWebClient
-        
         self.account_name = user_input["name"]
         self.web_ui_url = user_input.get("web_ui_url", "http://localhost:5001")
         self.monitor_only = user_input.get("monitor_only", False)
