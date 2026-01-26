@@ -16,14 +16,12 @@ const io = new SocketServer(server, { cors: { origin: "*" } });
 app.use(cors());
 app.use(express.json());
 
-// Serve static React files
 const PUBLIC_PATH = path.join(__dirname, 'public');
 app.use(express.static(PUBLIC_PATH));
 
 const PORT = 5002;
 const OPTIONS_PATH = '/data/options.json';
 
-// In-memory session store for direct access
 const sessions = new Map<string, { id: string, isAdmin: boolean }>();
 
 function getAddonConfig() {
@@ -36,12 +34,11 @@ function getAddonConfig() {
 }
 
 async function bootstrap() {
+    console.log('--- STARTING BOOTSTRAP ---');
     initDatabase();
     await engineManager.init();
 
-    // Hybrid Auth Middleware
     app.use((req, res, next) => {
-        // 1. Check for HA Ingress Headers
         const userId = req.headers['x-hass-user-id'] as string;
         const isAdmin = req.headers['x-hass-is-admin'] === '1' || req.headers['x-hass-is-admin'] === 'true';
         
@@ -50,7 +47,6 @@ async function bootstrap() {
             return next();
         }
 
-        // 2. Check for Session Token (Direct Access)
         const authHeader = req.headers['authorization'];
         const token = authHeader?.split(' ')[1];
         if (token && sessions.has(token)) {
@@ -59,12 +55,9 @@ async function bootstrap() {
             return next();
         }
 
-        // 3. Unauthenticated - Mark as Guest
         (req as any).haUser = null;
         next();
     });
-
-    // --- Auth API ---
 
     app.get('/api/auth/status', (req, res) => {
         const user = (req as any).haUser;
@@ -79,7 +72,6 @@ async function bootstrap() {
     app.post('/api/auth/login', (req, res) => {
         const { password } = req.body;
         const config = getAddonConfig();
-
         if (config.password && password === config.password) {
             const token = uuidv4();
             sessions.set(token, { id: 'direct_admin', isAdmin: true });
@@ -88,16 +80,14 @@ async function bootstrap() {
         res.status(401).json({ error: "Invalid password" });
     });
 
-    // --- Protected API Middleware ---
     const requireAuth = (req: any, res: any, next: any) => {
         if (!req.haUser) return res.status(401).json({ error: "Unauthorized" });
         next();
     };
 
-    // --- API Endpoints ---
-    
     app.get('/api/instances', requireAuth, (req, res) => {
         const user = (req as any).haUser;
+        console.log(`API: Fetching instances for user ${user.id} (Admin: ${user.isAdmin})`);
         let instances;
         if (user.isAdmin) {
             instances = db.prepare('SELECT * FROM instances').all();
@@ -110,6 +100,7 @@ async function bootstrap() {
     app.post('/api/instances', requireAuth, async (req, res) => {
         const { name } = req.body;
         const user = (req as any).haUser;
+        console.log(`API: Creating new instance '${name}' for user ${user.id}`);
         const result = db.prepare('INSERT INTO instances (name, ha_user_id) VALUES (?, ?)').run(name, user.id);
         const newId = result.lastInsertRowid as number;
         await engineManager.startInstance(newId, name);
@@ -119,8 +110,9 @@ async function bootstrap() {
     app.get('/api/messages/:instanceId/:jid', requireAuth, (req, res) => {
         const { instanceId, jid } = req.params;
         const user = (req as any).haUser;
-        const instance = db.prepare('SELECT ha_user_id FROM instances WHERE id = ?').get(instanceId) as any;
-        if (!user.isAdmin && instance?.ha_user_id !== user.id) return res.status(403).json({ error: "Access Denied" });
+        console.log(`API: Fetching messages for instance ${instanceId}, chat ${jid}`);
+        const instanceData = db.prepare('SELECT ha_user_id FROM instances WHERE id = ?').get(instanceId) as any;
+        if (!user.isAdmin && instanceData?.ha_user_id !== user.id) return res.status(403).json({ error: "Access Denied" });
 
         const messages = db.prepare('SELECT * FROM messages WHERE instance_id = ? AND chat_jid = ? ORDER BY id ASC').all(instanceId, jid);
         res.json(messages);
@@ -128,10 +120,7 @@ async function bootstrap() {
 
     app.post('/api/send_message', requireAuth, async (req, res) => {
         const { instanceId, contact, message } = req.body;
-        const user = (req as any).haUser;
-        const instanceData = db.prepare('SELECT ha_user_id FROM instances WHERE id = ?').get(instanceId) as any;
-        if (!user.isAdmin && instanceData?.ha_user_id !== user.id) return res.status(403).json({ error: "Access Denied" });
-
+        console.log(`API: Sending message to ${contact} via instance ${instanceId}`);
         const instance = engineManager.getInstance(instanceId);
         if (!instance) return res.status(404).json({ error: "Instance not found" });
         try {
@@ -140,30 +129,23 @@ async function bootstrap() {
         } catch (e: any) { res.status(500).json({ error: e.message }); }
     });
 
-    app.post('/api/settings', requireAuth, (req, res) => {
-        const user = (req as any).haUser;
-        if (!user.isAdmin) return res.status(403).json({ error: "Admin only" });
-        const { key, value } = req.body;
-        db.prepare('INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)').run(key, value);
-        if (key === 'gemini_api_key') aiService.reset();
-        res.json({ success: true });
-    });
-
-    app.get('/api/settings/:key', requireAuth, (req, res) => {
-        const row = db.prepare('SELECT value FROM settings WHERE key = ?').get(req.params.key) as any;
-        res.json({ value: row?.value || "" });
-    });
-
-    app.post('/api/ai/analyze', requireAuth, async (req, res) => {
-        const { messages } = req.body;
-        const intent = await aiService.analyzeIntent(messages);
-        res.json({ intent });
-    });
-
-    app.post('/api/ai/draft', requireAuth, async (req, res) => {
-        const { messages, steer } = req.body;
-        const draft = await aiService.generateDraft(messages, steer);
-        res.json({ draft });
+    io.on('connection', (socket) => {
+        console.log('WebSocket: Client connected');
+        const interval = setInterval(() => {
+            const allInstances = engineManager.getAllInstances();
+            if (allInstances.length > 0) {
+                const status = allInstances.map(i => ({
+                    id: i.id,
+                    status: i.status,
+                    qr: i.qr
+                }));
+                socket.emit('instances_status', status);
+            }
+        }, 2000);
+        socket.on('disconnect', () => {
+            console.log('WebSocket: Client disconnected');
+            clearInterval(interval);
+        });
     });
 
     app.get('*', (req, res) => {

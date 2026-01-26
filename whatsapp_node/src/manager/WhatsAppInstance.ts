@@ -41,21 +41,27 @@ export class WhatsAppInstance {
             const { connection, lastDisconnect, qr } = update;
             
             if (qr) {
+                console.log(`Instance ${this.id}: New QR Code generated`);
                 this.qr = await qrcode.toDataURL(qr);
                 this.status = 'qr_ready';
             }
 
             if (connection === 'open') {
+                console.log(`Instance ${this.id}: Connected successfully`);
                 this.status = 'connected';
                 this.qr = null;
                 db.prepare('UPDATE instances SET status = ? WHERE id = ?').run('connected', this.id);
             }
 
             if (connection === 'close') {
+                console.log(`Instance ${this.id}: Connection closed`);
                 this.status = 'disconnected';
                 db.prepare('UPDATE instances SET status = ? WHERE id = ?').run('disconnected', this.id);
                 const shouldReconnect = (lastDisconnect?.error as Boom)?.output?.statusCode !== DisconnectReason.loggedOut;
-                if (shouldReconnect) this.init();
+                if (shouldReconnect) {
+                    console.log(`Instance ${this.id}: Reconnecting...`);
+                    this.init();
+                }
             }
         });
 
