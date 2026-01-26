@@ -64,9 +64,8 @@ export class WhatsAppInstance {
                 VALUES (?, ?, ?, ?, ?, ?, ?)
             `);
 
-            const sock = this.sock;
-            if (sock) {
-                sock.ev.process(async (events: any) => {
+            if (this.sock) {
+                (this.sock as any).ev.process(async (events: any) => {
                     if (events['connection.update']) {
                         const update = events['connection.update'];
                         const { connection, lastDisconnect, qr } = update;
