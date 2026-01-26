@@ -202,7 +202,6 @@ export class WhatsAppInstance {
             console.error(`TRACE [Instance ${this.id}]: FATAL ERROR during init:`, err);
         }
     }
-    }
 
     private startSyncWatchdog() {
         this.stopSyncWatchdog();
