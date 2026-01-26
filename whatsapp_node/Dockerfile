@@ -1,27 +1,24 @@
-# Version 1.0.1
-ARG BUILD_FROM=ghcr.io/home-assistant/aarch64-base:latest
-FROM $BUILD_FROM
+FROM node:20-alpine
 
-# Install Node.js and build tools (ensure git is present)
-RUN apk add --no-cache nodejs npm python3 make g++ git
+# Install build tools and git (needed for some npm packages)
+RUN apk add --no-cache python3 make g++ git
 
 WORKDIR /app
 
 # Copy package files
-COPY package.json .
-COPY tsconfig.json .
+COPY package.json tsconfig.json ./
 
 # Install dependencies
 RUN npm install
 
-# Copy source
+# Copy source code
 COPY src/ ./src/
 
-# Build TypeScript
+# Build TypeScript to JavaScript
 RUN npm run build
 
-# Expose ports
+# Expose the API port
 EXPOSE 5002
 
-# Start script
+# Run the compiled code
 CMD ["npm", "start"]
