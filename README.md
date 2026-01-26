@@ -1,5 +1,8 @@
 # WhatsApp Integration for Home Assistant & Web Client
 
+[![Open your Home Assistant instance and start setting up a new integration.](https://my.home-assistant.io/badges/config_flow_start.svg)](https://my.home-assistant.io/redirect/config_flow_start/?domain=whatsapp_hass)
+[![Open your Home Assistant instance and open a repository inside the Home Assistant Community Store.](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=maiks1986&repository=HA-Whatsapp-intergration&category=integration)
+
 This project provides a comprehensive solution for integrating WhatsApp with Home Assistant, complete with a custom Web UI for managing chats and leveraging AI for smart replies.
 
 ## Overview
