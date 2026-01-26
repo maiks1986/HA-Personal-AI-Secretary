@@ -8,5 +8,10 @@
   "iot_class": "cloud_polling",
   "config_flow": true,
   "dependencies": [],
-  "requirements": ["selenium>=4.22.0", "webdriver-manager>=4.0.1", "requests>=2.32.3"]
+  "requirements": [
+    "playwright>=1.45.0",
+    "requests>=2.32.3",
+    "Flask>=3.0.3",
+    "google-generativeai>=0.7.2"
+  ]
 }

@@ -2,113 +2,69 @@
 import asyncio
 import logging
 import os
-import datetime
-import requests
-import re
+import subprocess
+import threading
+from homeassistant.core import HomeAssistant
+from homeassistant.config_entries import ConfigEntry
 from .const import DOMAIN
+from .whatsapp_web_client import WhatsAppWebClient
 
 _LOGGER = logging.getLogger(__name__)
 
-async def async_setup_entry(hass, entry):
+# Global storage for the UI thread
+UI_THREAD = None
+
+async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry):
     """Set up WhatsApp from a config entry."""
     hass.data.setdefault(DOMAIN, {})
     
-    account_name = entry.data["name"]
-    web_ui_url = entry.data.get("web_ui_url", "http://localhost:5001")
+    # Ensure Playwright browsers are installed (runs in background thread)
+    def install_playwright():
+        try:
+            _LOGGER.info("Checking Playwright browsers...")
+            subprocess.run(["python3", "-m", "playwright", "install", "chromium"], check=True)
+        except Exception as e:
+            _LOGGER.error(f"Failed to install Playwright browsers: {e}")
+
+    await hass.async_add_executor_job(install_playwright)
+
+    # Initialize client
+    user_data_dir = hass.config.path(f"whatsapp_sessions/{entry.data['name']}")
+    os.makedirs(user_data_dir, exist_ok=True)
+    client = WhatsAppWebClient(user_data_dir=user_data_dir)
     
+    # Start the Web UI Gateway locally on the HA server
+    global UI_THREAD
+    if UI_THREAD is None:
+        from .gateway_ui import start_gateway
+        UI_THREAD = threading.Thread(target=start_gateway, args=(hass, client), daemon=True)
+        UI_THREAD.start()
+        _LOGGER.info("WhatsApp Web UI Gateway started on port 5001")
+
     hass.data[DOMAIN][entry.entry_id] = {
-        "name": account_name,
-        "web_ui_url": web_ui_url
+        "client": client,
+        "name": entry.data["name"]
     }
 
-    async def handle_send_message(call):
-        """Handle the send_message service call globally."""
-        sender = call.data.get("sender")
-        contact = call.data.get("contact")
-        message = call.data.get("message")
-        
-        # Find the client for the specified sender
-        target_client = None
-        for entry_id, data in hass.data[DOMAIN].items():
-            if data.get("name") == sender:
-                target_client = data["client"]
-                break
-        
-        if not target_client:
-            _LOGGER.error(f"No WhatsApp account found with name: {sender}")
-            hass.components.persistent_notification.async_create(
-                f"No WhatsApp account found with name: {sender}",
-                title="WhatsApp Integration Error",
-                notification_id=f"whatsapp_error_missing_sender"
-            )
-            return
-
-        try:
-            proxy_url = f"{web_ui_url}/api/proxy_send_message"
-            requests.post(proxy_url, json={"contact": contact, "message": message}, timeout=10)
-        except Exception as e:
-            _LOGGER.error("Failed to send message via proxy: %s", e)
-            hass.components.persistent_notification.async_create(
-                f"Failed to send message to {contact} from {sender}: {e}",
-                title="WhatsApp Integration Error",
-                notification_id=f"whatsapp_error_{sender}"
-            )
-
-    # Register service only if not already registered
-    if not hass.services.has_service(DOMAIN, "send_message"):
-        hass.services.async_register(DOMAIN, "send_message", handle_send_message)
-
-    # Register Sidebar Panel
-    if web_ui_url:
-        hass.components.frontend.async_register_panel(
-            "iframe",
-            "whatsapp",
-            "mdi:whatsapp",
-            title="WhatsApp",
-            url=web_ui_url,
-            require_admin=True,
-        )
+    # Register Sidebar Panel pointing to the local HA IP
+    hass.components.frontend.async_register_panel(
+        "iframe",
+        "whatsapp",
+        "mdi:whatsapp",
+        title="WhatsApp",
+        url="http://127.0.0.1:5001", # Localhost works for the iframe if accessed locally, 
+                                     # but we'll use the external URL in reality
+        require_admin=True,
+    )
 
     return True
 
-def post_to_webhook(message_data, base_url):
-    """Send message data to the webhook in a separate thread."""
-    try:
-        url = f"{base_url}/webhook"
-        requests.post(url, json=message_data, timeout=5)
-    except requests.RequestException as e:
-        _LOGGER.error(f"Failed to send message to webhook: {e}")
-
-def update_status(account, status, base_url):
-    """Send status update to Web UI."""
-    try:
-        url = f"{base_url}/api/update_status"
-        requests.post(url, json={"account": account, "status": status}, timeout=5)
-    except requests.RequestException as e:
-        _LOGGER.error(f"Failed to update status: {e}")
-
-def upload_history(account, history_data, base_url):
-    """Upload bulk history to Web UI."""
-    try:
-        url = f"{base_url}/api/upload_history"
-        requests.post(url, json={"account": account, "history": history_data}, timeout=10)
-    except requests.RequestException as e:
-        _LOGGER.error(f"Failed to upload history: {e}")
-
-def parse_message(raw_message):
-    """Parse the raw message string into a structured dictionary."""
-    # Example format: "[26-01-2026 14:00] Sender Name: Message text"
-    match = re.match(r"\[(.*?)\]\s(.*?):\s(.*)", raw_message)
-    if match:
-        return {"timestamp": match.group(1), "sender": match.group(2), "text": match.group(3)}
-    return {"timestamp": "Unknown", "sender": "Unknown", "text": raw_message}
-
-async def async_unload_entry(hass, entry):
+async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry):
     """Unload a config entry."""
-    hass.data[DOMAIN].pop(entry.entry_id)
+    data = hass.data[DOMAIN].pop(entry.entry_id)
+    await data["client"].close()
     
     if not hass.data[DOMAIN]:
-        hass.services.async_remove(DOMAIN, "send_message")
         hass.components.frontend.async_remove_panel("whatsapp")
     
     return True
