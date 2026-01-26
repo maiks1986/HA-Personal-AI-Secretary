@@ -149,7 +149,7 @@ export class WhatsAppInstance {
             }
         });
 
-        this.sock.ev.on('contacts.set', (payload: any) => {
+        (this.sock.ev as any).on('contacts.set', (payload: any) => {
             const contacts = payload.contacts || [];
             if (this.debugEnabled) console.log(`Instance ${this.id}: [ContactsSet] ${contacts.length} items`);
             if (contacts.length > 0) this.syncRetryCount = 0;
