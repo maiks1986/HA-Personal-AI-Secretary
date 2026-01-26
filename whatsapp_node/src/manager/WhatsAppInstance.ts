@@ -89,6 +89,8 @@ export class WhatsAppInstance {
 
         // Track ALL events for debugging and robust discovery
         this.sock.ev.process(async (events) => {
+            const anyEvents = events as any;
+
             if (events['messaging-history.set']) {
                 const { chats, messages } = events['messaging-history.set'];
                 console.log(`Instance ${this.id}: [HistorySet] Syncing ${chats.length} chats`);
@@ -99,8 +101,8 @@ export class WhatsAppInstance {
                 })();
             }
 
-            if (events['chats.set']) {
-                const { chats } = events['chats.set'];
+            if (anyEvents['chats.set']) {
+                const { chats } = anyEvents['chats.set'];
                 console.log(`Instance ${this.id}: [ChatsSet] Received ${chats.length} chats`);
                 db.transaction(() => {
                     for (const chat of chats) {
@@ -116,8 +118,8 @@ export class WhatsAppInstance {
                 }
             }
 
-            if (events['contacts.set']) {
-                const { contacts } = events['contacts.set'];
+            if (anyEvents['contacts.set']) {
+                const { contacts } = anyEvents['contacts.set'];
                 console.log(`Instance ${this.id}: [ContactsSet] Received ${contacts.length} contacts`);
                 db.transaction(() => {
                     for (const contact of contacts) {
