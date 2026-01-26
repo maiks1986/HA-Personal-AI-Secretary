@@ -5,9 +5,10 @@ import os
 import subprocess
 import threading
 import sys
+import re
+import requests
 from homeassistant.core import HomeAssistant
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.helpers.network import get_url
 from .const import DOMAIN
 
 _LOGGER = logging.getLogger(__name__)
@@ -15,74 +16,62 @@ _LOGGER = logging.getLogger(__name__)
 # Global storage for the UI thread
 UI_THREAD = None
 
-def ensure_dependencies():
-    """Install dependencies at runtime to avoid manifest conflicts."""
-    packages = ["playwright>=1.45.0", "google-generativeai>=0.7.2"]
-    for package in packages:
+def cleanup_conflicts():
+    """Remove conflicting libraries that break HA core integrations."""
+    conflicts = ["google-generativeai", "playwright"]
+    for pkg in conflicts:
         try:
-            # Check if already installed
-            pkg_name = package.split('>=')[0].replace('-', '_')
-            if pkg_name == "google_generativeai":
-                import google.generativeai
-            else:
-                __import__(pkg_name)
-        except ImportError:
-            _LOGGER.info(f"Installing missing dependency: {package}")
-            try:
-                subprocess.run([sys.executable, "-m", "pip", "install", package], check=True)
-            except Exception as e:
-                _LOGGER.error(f"Failed to install {package}: {e}")
-
-    # After installing playwright, install chromium
-    try:
-        _LOGGER.info("Ensuring Playwright chromium is installed...")
-        subprocess.run([sys.executable, "-m", "playwright", "install", "chromium"], check=True)
-    except Exception as e:
-        _LOGGER.error(f"Failed to run playwright install: {e}")
+            _LOGGER.info(f"Cleaning up conflicting package: {pkg}")
+            subprocess.run([sys.executable, "-m", "pip", "uninstall", "-y", pkg], check=False)
+        except:
+            pass
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry):
     """Set up WhatsApp from a config entry."""
     hass.data.setdefault(DOMAIN, {})
     
-    # Run installation in executor to avoid blocking
-    await hass.async_add_executor_job(ensure_dependencies)
+    # Run cleanup once to fix the broken ESPHome/etc
+    if not hass.data.get(f"{DOMAIN}_cleaned"):
+        await hass.async_add_executor_job(cleanup_conflicts)
+        hass.data[f"{DOMAIN}_cleaned"] = True
 
-    # Defer import of client until dependencies are likely installed
-    from .whatsapp_web_client import WhatsAppWebClient
-
-    # Initialize client
-    user_data_dir = hass.config.path(f"whatsapp_sessions/{entry.data['name']}")
-    os.makedirs(user_data_dir, exist_ok=True)
-    client = WhatsAppWebClient(user_data_dir=user_data_dir)
+    account_name = entry.data["name"]
+    web_ui_url = entry.data.get("web_ui_url", "http://localhost:5001")
     
-    # Start the Web UI Gateway locally on the HA server
+    # Start the Web UI Gateway locally on the HA server (Lite version)
     global UI_THREAD
     if UI_THREAD is None:
         from .gateway_ui import start_gateway
-        UI_THREAD = threading.Thread(target=start_gateway, args=(hass, client), daemon=True)
+        UI_THREAD = threading.Thread(target=start_gateway, args=(hass, None), daemon=True)
         UI_THREAD.start()
-        _LOGGER.info("WhatsApp Web UI Gateway started on port 5001")
+        _LOGGER.info("WhatsApp Lite Gateway started on port 5001")
 
     hass.data[DOMAIN][entry.entry_id] = {
-        "client": client,
-        "name": entry.data["name"]
+        "name": account_name,
+        "web_ui_url": web_ui_url
     }
 
-    # Determine URL for the sidebar panel
-    try:
-        base_url = get_url(hass, allow_internal=True, allow_ip=True)
-        # Replace the port 8123 with 5001
-        panel_url = base_url.rsplit(":", 1)[0] + ":5001"
-    except:
-        panel_url = "/local/whatsapp_redirect" # Fallback if URL cannot be determined
+    async def handle_send_message(call):
+        """Proxy send message to whichever gateway is active."""
+        contact = call.data.get("contact")
+        message = call.data.get("message")
+        try:
+            # Try to send via the configured Web UI URL
+            requests.post(f"{web_ui_url}/api/proxy_send_message", 
+                         json={"contact": contact, "message": message}, timeout=5)
+        except Exception as e:
+            _LOGGER.error(f"Failed to send message: {e}")
+
+    hass.services.async_register(DOMAIN, "send_message", handle_send_message)
 
     # Register Sidebar Panel
+    # Using relative path to the local gateway
     hass.components.frontend.async_register_panel(
         "iframe",
         "whatsapp",
         "mdi:whatsapp",
         title="WhatsApp",
-        url=panel_url,
+        url="http://192.168.188.95:5001", # Point directly to the server port
         require_admin=True,
     )
 
@@ -90,10 +79,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry):
 
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry):
     """Unload a config entry."""
-    data = hass.data[DOMAIN].pop(entry.entry_id)
-    await data["client"].close()
-    
+    hass.data[DOMAIN].pop(entry.entry_id)
     if not hass.data[DOMAIN]:
         hass.components.frontend.async_remove_panel("whatsapp")
-    
     return True
