@@ -9,12 +9,6 @@ from .const import DOMAIN
 
 _LOGGER = logging.getLogger(__name__)
 
-# This should be made configurable
-WEB_UI_BASE = "http://localhost:5001"
-WEBHOOK_URL = f"{WEB_UI_BASE}/webhook"
-STATUS_URL = f"{WEB_UI_BASE}/api/update_status"
-HISTORY_URL = f"{WEB_UI_BASE}/api/upload_history"
-
 async def async_setup_entry(hass, entry):
     """Set up WhatsApp from a config entry."""
     from .whatsapp_web_client import WhatsAppWebClient
@@ -23,11 +17,12 @@ async def async_setup_entry(hass, entry):
     
     user_data_dir = entry.data["user_data_dir"]
     account_name = entry.data["name"]
+    web_ui_url = entry.data.get("web_ui_url", "http://localhost:5001")
     
     client = WhatsAppWebClient(user_data_dir=user_data_dir)
     
     # Run client in background
-    task = hass.async_create_task(run_client(client, hass, entry))
+    task = hass.async_create_task(run_client(client, hass, entry, web_ui_url))
     
     hass.data[DOMAIN][entry.entry_id] = {
         "client": client,
@@ -73,24 +68,27 @@ async def async_setup_entry(hass, entry):
 
     return True
 
-def post_to_webhook(message_data):
+def post_to_webhook(message_data, base_url):
     """Send message data to the webhook in a separate thread."""
     try:
-        requests.post(WEBHOOK_URL, json=message_data, timeout=5)
+        url = f"{base_url}/webhook"
+        requests.post(url, json=message_data, timeout=5)
     except requests.RequestException as e:
         _LOGGER.error(f"Failed to send message to webhook: {e}")
 
-def update_status(account, status):
+def update_status(account, status, base_url):
     """Send status update to Web UI."""
     try:
-        requests.post(STATUS_URL, json={"account": account, "status": status}, timeout=5)
+        url = f"{base_url}/api/update_status"
+        requests.post(url, json={"account": account, "status": status}, timeout=5)
     except requests.RequestException as e:
         _LOGGER.error(f"Failed to update status: {e}")
 
-def upload_history(account, history_data):
+def upload_history(account, history_data, base_url):
     """Upload bulk history to Web UI."""
     try:
-        requests.post(HISTORY_URL, json={"account": account, "history": history_data}, timeout=10)
+        url = f"{base_url}/api/upload_history"
+        requests.post(url, json={"account": account, "history": history_data}, timeout=10)
     except requests.RequestException as e:
         _LOGGER.error(f"Failed to upload history: {e}")
 
@@ -103,7 +101,7 @@ def parse_message(raw_message):
     return {"timestamp": "Unknown", "sender": "Unknown", "text": raw_message}
 
 
-async def run_client(client, hass, entry):
+async def run_client(client, hass, entry, web_ui_url):
     """A long-running task to keep the client alive and log messages."""
     loop = asyncio.get_event_loop()
     account_name = entry.data["name"]
@@ -126,14 +124,14 @@ async def run_client(client, hass, entry):
         while True:
             if await loop.run_in_executor(None, client.is_logged_in):
                 _LOGGER.info(f"WhatsApp client {account_name} is logged in.")
-                await loop.run_in_executor(None, update_status, account_name, "online")
+                await loop.run_in_executor(None, update_status, account_name, "online", web_ui_url)
                 
                 if monitor_only:
                     _LOGGER.info("Monitor Mode: Scraping all data...")
                     scraped_data = await loop.run_in_executor(None, client.scrape_all_data)
                     
                     # Upload to Web UI
-                    await loop.run_in_executor(None, upload_history, account_name, scraped_data)
+                    await loop.run_in_executor(None, upload_history, account_name, scraped_data, web_ui_url)
 
                     # Also log locally
                     for chat_title, messages in scraped_data.items():
@@ -168,7 +166,7 @@ async def run_client(client, hass, entry):
                                         parsed = parse_message(msg)
                                         parsed["account"] = account_name # Add account name
                                         parsed["chat_name"] = chat_name
-                                        await loop.run_in_executor(None, post_to_webhook, parsed)
+                                        await loop.run_in_executor(None, post_to_webhook, parsed, web_ui_url)
 
                                         logged_messages.add(msg)
                                 f.write("---\n\n")
@@ -177,7 +175,7 @@ async def run_client(client, hass, entry):
 
             else:
                 _LOGGER.warning(f"WhatsApp client {account_name} is not logged in.")
-                await loop.run_in_executor(None, update_status, account_name, "offline")
+                await loop.run_in_executor(None, update_status, account_name, "offline", web_ui_url)
                 await asyncio.sleep(15) 
                 
     except asyncio.CancelledError:
@@ -186,7 +184,7 @@ async def run_client(client, hass, entry):
         _LOGGER.error("Error in WhatsApp client task: %s", e, exc_info=True)
     finally:
         _LOGGER.info("Closing WhatsApp client.")
-        await loop.run_in_executor(None, update_status, account_name, "offline")
+        await loop.run_in_executor(None, update_status, account_name, "offline", web_ui_url)
         await loop.run_in_executor(None, client.close)
 
 async def async_unload_entry(hass, entry):

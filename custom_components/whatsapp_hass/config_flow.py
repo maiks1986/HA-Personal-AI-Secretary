@@ -23,6 +23,7 @@ class WhatsAppConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 step_id="user",
                 data_schema=vol.Schema({
                     vol.Required("name", description="A unique name for this WhatsApp account"): str,
+                    vol.Optional("web_ui_url", default="http://localhost:5001", description="URL of the Web UI (e.g. http://192.168.1.10:5001)"): str,
                     vol.Optional("monitor_only", default=False, description="Silent Monitor Mode (Download only)"): bool,
                 }),
             )
@@ -30,6 +31,7 @@ class WhatsAppConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         from .whatsapp_web_client import WhatsAppWebClient
         
         self.account_name = user_input["name"]
+        self.web_ui_url = user_input.get("web_ui_url", "http://localhost:5001")
         self.monitor_only = user_input.get("monitor_only", False)
         
         await self.async_set_unique_id(self.account_name)
@@ -48,7 +50,8 @@ class WhatsAppConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     data={
                         "name": self.account_name, 
                         "user_data_dir": self.user_data_dir,
-                        "monitor_only": self.monitor_only
+                        "monitor_only": self.monitor_only,
+                        "web_ui_url": self.web_ui_url
                     }
                 )
             else:
@@ -86,7 +89,8 @@ class WhatsAppConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     data={
                         "name": self.account_name, 
                         "user_data_dir": self.user_data_dir,
-                        "monitor_only": self.monitor_only
+                        "monitor_only": self.monitor_only,
+                        "web_ui_url": self.web_ui_url
                     }
                 )
             else:
