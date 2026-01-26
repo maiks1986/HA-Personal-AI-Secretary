@@ -21,6 +21,9 @@ export class WhatsAppInstance {
     public qr: string | null = null;
     public status: string = 'disconnected';
     private authPath: string;
+    private syncRetryCount: number = 0;
+    private maxSyncRetries: number = 10;
+    private watchdogTimer: NodeJS.Timeout | null = null;
 
     constructor(id: number, name: string) {
         this.id = id;
@@ -34,7 +37,7 @@ export class WhatsAppInstance {
         const { state, saveCreds } = await useMultiFileAuthState(this.authPath);
         const { version } = await fetchLatestBaileysVersion();
 
-        const logger = pino({ level: 'info' });
+        const logger = pino({ level: 'silent' }); // Quiet internal logs to focus on our discovery logs
 
         this.sock = makeWASocket({
             version,
@@ -52,24 +55,31 @@ export class WhatsAppInstance {
             const { connection, lastDisconnect, qr } = update;
             
             if (qr) {
-                console.log(`Instance ${this.id}: New QR Code generated`);
                 this.qr = await qrcode.toDataURL(qr);
                 this.status = 'qr_ready';
             }
 
             if (connection === 'open') {
-                console.log(`Instance ${this.id}: Connected`);
+                console.log(`Instance ${this.id}: Connected. Resetting sync watchdog...`);
                 this.status = 'connected';
                 this.qr = null;
                 db.prepare('UPDATE instances SET status = ? WHERE id = ?').run('connected', this.id);
+                
+                // Start Watchdog to ensure data arrives
+                this.startSyncWatchdog();
             }
 
             if (connection === 'close') {
                 const statusCode = (lastDisconnect?.error as Boom)?.output?.statusCode;
+                console.log(`Instance ${this.id}: Connection closed. Status: ${statusCode}`);
                 this.status = 'disconnected';
+                this.qr = null;
+                this.stopSyncWatchdog();
+                
                 db.prepare('UPDATE instances SET status = ? WHERE id = ?').run('disconnected', this.id);
                 
                 if (statusCode !== DisconnectReason.loggedOut) {
+                    console.log(`Instance ${this.id}: Unexpected close, reconnecting...`);
                     setTimeout(() => this.init(), 5000);
                 }
             }
@@ -85,14 +95,13 @@ export class WhatsAppInstance {
             unread_count = excluded.unread_count
         `);
 
-        // Use any to bypass map limitations for discovery events
         const evAny = this.sock.ev as any;
 
-        // History Sync
         this.sock.ev.on('messaging-history.set', (payload: any) => {
             const { chats } = payload;
-            if (chats) {
-                console.log(`Instance ${this.id}: [HistorySet] Found ${chats.length} chats`);
+            if (chats && chats.length > 0) {
+                console.log(`Instance ${this.id}: [HistorySet] Received ${chats.length} chats. Sync successful.`);
+                this.syncRetryCount = 0; // Success! Reset counter
                 db.transaction(() => {
                     for (const chat of chats) {
                         upsertChat.run(this.id, chat.id, chat.name || chat.id.split('@')[0], chat.unreadCount || 0);
@@ -101,11 +110,11 @@ export class WhatsAppInstance {
             }
         });
 
-        // Alternative sync paths
         evAny.on('chats.set', (payload: any) => {
             const { chats } = payload;
-            if (chats) {
-                console.log(`Instance ${this.id}: [ChatsSet] Found ${chats.length} chats`);
+            if (chats && chats.length > 0) {
+                console.log(`Instance ${this.id}: [ChatsSet] Received ${chats.length} chats.`);
+                this.syncRetryCount = 0;
                 db.transaction(() => {
                     for (const chat of chats) {
                         upsertChat.run(this.id, chat.id, chat.name || chat.id.split('@')[0], chat.unreadCount || 0);
@@ -115,18 +124,19 @@ export class WhatsAppInstance {
         });
 
         evAny.on('chats.upsert', (chats: any[]) => {
+            if (chats.length > 0) this.syncRetryCount = 0;
             for (const chat of chats) {
                 upsertChat.run(this.id, chat.id, chat.name || chat.id.split('@')[0], 0);
             }
         });
 
         evAny.on('contacts.upsert', (contacts: any[]) => {
+            if (contacts.length > 0) this.syncRetryCount = 0;
             for (const contact of contacts) {
                 upsertChat.run(this.id, contact.id, contact.name || contact.notify || contact.id.split('@')[0], 0);
             }
         });
 
-        // Messages
         this.sock.ev.on('messages.upsert', async m => {
             if (m.type === 'notify') {
                 for (const msg of m.messages) {
@@ -155,6 +165,41 @@ export class WhatsAppInstance {
         });
     }
 
+    private startSyncWatchdog() {
+        this.stopSyncWatchdog();
+        this.watchdogTimer = setTimeout(async () => {
+            const row = db.prepare('SELECT COUNT(*) as count FROM chats WHERE instance_id = ?').get(this.id) as any;
+            const chatCount = row?.count || 0;
+
+            if (chatCount === 0) {
+                this.syncRetryCount++;
+                console.log(`Instance ${this.id}: Watchdog alert! No chats found in DB after 60s. Attempt ${this.syncRetryCount}/${this.maxSyncRetries}`);
+                
+                if (this.syncRetryCount < this.maxSyncRetries) {
+                    console.log(`Instance ${this.id}: Triggering soft restart to force sync...`);
+                    if (this.sock) {
+                        try { 
+                            this.sock.end(undefined); 
+                            this.sock = null;
+                        } catch (e) {}
+                    }
+                    setTimeout(() => this.init(), 2000);
+                } else {
+                    console.error(`Instance ${this.id}: Reached max sync retries. Please check if the account is actually active or try a Hard Reset.`);
+                }
+            } else {
+                console.log(`Instance ${this.id}: Watchdog satisfied. Found ${chatCount} chats in database.`);
+            }
+        }, 60000); // Wait 60 seconds for data to start flowing
+    }
+
+    private stopSyncWatchdog() {
+        if (this.watchdogTimer) {
+            clearTimeout(this.watchdogTimer);
+            this.watchdogTimer = null;
+        }
+    }
+
     async sendMessage(jid: string, text: string) {
         if (!this.sock || this.status !== 'connected') throw new Error("Instance not connected");
         await this.sock.sendMessage(jid, { text });
@@ -172,6 +217,7 @@ export class WhatsAppInstance {
     }
 
     async deleteAuth() {
+        this.stopSyncWatchdog();
         if (this.sock) {
             try { await this.sock.logout(); } catch (e) {}
             this.sock = null;
@@ -179,9 +225,11 @@ export class WhatsAppInstance {
         if (fs.existsSync(this.authPath)) {
             fs.rmSync(this.authPath, { recursive: true, force: true });
         }
+        this.syncRetryCount = 0;
     }
 
     async close() {
+        this.stopSyncWatchdog();
         if (this.sock) {
             this.sock.end(undefined);
             this.sock = null;
