@@ -1,5 +1,5 @@
 name: "WhatsApp Node Engine"
-version: "1.2.6"
+version: "1.2.7"
 slug: "whatsapp_node_engine"
 description: "Browserless WhatsApp Engine with AI and Native HA Auth"
 arch:
@@ -12,8 +12,10 @@ map:
   - config:rw
 options:
   password: ""
+  debug_logging: false
 schema:
   password: password?
+  debug_logging: bool?
 ingress: true
 ingress_port: 5002
 ingress_entry: /

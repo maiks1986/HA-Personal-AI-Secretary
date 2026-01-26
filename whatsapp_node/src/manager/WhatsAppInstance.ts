@@ -25,10 +25,12 @@ export class WhatsAppInstance {
     private maxSyncRetries: number = 10;
     private watchdogTimer: NodeJS.Timeout | null = null;
     private isReconnecting: boolean = false;
+    private debugEnabled: boolean;
 
-    constructor(id: number, name: string) {
+    constructor(id: number, name: string, debugEnabled: boolean = false) {
         this.id = id;
         this.name = name;
+        this.debugEnabled = debugEnabled;
         this.authPath = process.env.NODE_ENV === 'development'
             ? path.join(__dirname, `../../auth_info_${id}`)
             : `/data/auth_info_${id}`;
@@ -43,7 +45,7 @@ export class WhatsAppInstance {
         const { state, saveCreds } = await useMultiFileAuthState(this.authPath);
         const { version } = await fetchLatestBaileysVersion();
 
-        const logger = pino({ level: 'silent' }); // Quiet internal logs to focus on our discovery logs
+        const logger = pino({ level: this.debugEnabled ? 'debug' : 'silent' }); 
 
         this.sock = makeWASocket({
             version,
@@ -56,6 +58,25 @@ export class WhatsAppInstance {
             defaultQueryTimeoutMs: 120000,
             logger: logger as any
         });
+
+        const evAny = this.sock.ev as any;
+
+        if (this.debugEnabled) {
+            evAny.on('messaging-history.set', (payload: any) => {
+                console.log(`DEBUG: [HistorySet Raw] Keys: ${Object.keys(payload)}`);
+                if (payload.chats) console.log(`DEBUG: [HistorySet] Chat count: ${payload.chats.length}`);
+            });
+
+            // Log ALL incoming events for discovery
+            this.sock.ev.process((events) => {
+                if (events['messaging-history.set']) console.log('DEBUG: Event -> messaging-history.set');
+                if (events['chats.set']) console.log('DEBUG: Event -> chats.set');
+                if (events['chats.upsert']) console.log('DEBUG: Event -> chats.upsert');
+                if (events['chats.update']) console.log('DEBUG: Event -> chats.update');
+                if (events['contacts.set']) console.log('DEBUG: Event -> contacts.set');
+                if (events['contacts.upsert']) console.log('DEBUG: Event -> contacts.upsert');
+            });
+        }
 
         this.sock.ev.on('connection.update', async (update: Partial<ConnectionState>) => {
             const { connection, lastDisconnect, qr } = update;

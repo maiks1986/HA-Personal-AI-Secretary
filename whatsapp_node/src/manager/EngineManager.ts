@@ -3,8 +3,10 @@ import { WhatsAppInstance } from './WhatsAppInstance';
 
 class EngineManager {
     private instances: Map<number, WhatsAppInstance> = new Map();
+    private debugEnabled: boolean = false;
 
-    async init() {
+    async init(debugEnabled: boolean = false) {
+        this.debugEnabled = debugEnabled;
         // Load all instances from DB
         const rows = db.prepare('SELECT id, name FROM instances').all() as any[];
         for (const row of rows) {
@@ -16,7 +18,7 @@ class EngineManager {
     async startInstance(id: number, name: string) {
         if (this.instances.has(id)) return this.instances.get(id);
         
-        const instance = new WhatsAppInstance(id, name);
+        const instance = new WhatsAppInstance(id, name, this.debugEnabled);
         await instance.init();
         this.instances.set(id, instance);
         return instance;

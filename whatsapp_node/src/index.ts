@@ -36,7 +36,12 @@ function getAddonConfig() {
 async function bootstrap() {
     console.log('--- STARTING BOOTSTRAP ---');
     initDatabase();
-    await engineManager.init();
+    
+    const config = getAddonConfig();
+    const debugEnabled = config.debug_logging === true || config.debug_logging === 'true';
+    if (debugEnabled) console.log('DEBUG: Verbose logging enabled');
+    
+    await engineManager.init(debugEnabled);
 
     app.use((req, res, next) => {
         const userId = req.headers['x-hass-user-id'] as string;
