@@ -62,7 +62,7 @@ export class WhatsAppInstance {
                 auth: state,
                 printQRInTerminal: false,
                 browser: Browsers.ubuntu('Chrome'),
-                syncFullHistory: false,
+                syncFullHistory: true,
                 markOnlineOnConnect: true,
                 connectTimeoutMs: 60000,
                 defaultQueryTimeoutMs: 120000,
@@ -82,6 +82,12 @@ export class WhatsAppInstance {
                         this.status = 'connected';
                         this.qr = null;
                         db.prepare('UPDATE instances SET status = ? WHERE id = ?').run('connected', this.id);
+
+                        // Aggressive Subscription for sync data
+                        if (this.sock) {
+                            this.sock.upsertMessageFeedback({ remoteJid: 'status@broadcast', participant: 'me', key: { id: 'sync' } } as any);
+                        }
+                        
                         this.startSyncWatchdog();
                     }
                     if (connection === 'close') {
