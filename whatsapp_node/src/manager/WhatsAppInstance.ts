@@ -43,7 +43,8 @@ export class WhatsAppInstance {
             syncFullHistory: true,
             markOnlineOnConnect: true,
             connectTimeoutMs: 60000,
-            defaultQueryTimeoutMs: 60000
+            defaultQueryTimeoutMs: 60000,
+            historySyncTimeoutMs: 120000
         });
 
         this.sock.ev.on('connection.update', async (update: Partial<ConnectionState>) => {
