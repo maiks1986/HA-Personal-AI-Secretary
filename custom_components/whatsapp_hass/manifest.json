@@ -1,0 +1,11 @@
+{
+  "domain": "whatsapp_hass",
+  "name": "WhatsApp Integration",
+  "documentation": "https://github.com/MaiksT/hass-whatsapp",
+  "issue_tracker": "https://github.com/MaiksT/hass-whatsapp/issues",
+  "codeowners": ["@MaiksT"],
+  "version": "0.1.0",
+  "iot_class": "cloud_polling",
+  "dependencies": [],
+  "requirements": ["selenium==4.22.0", "webdriver-manager==4.0.1", "requests==2.32.3"]
+}

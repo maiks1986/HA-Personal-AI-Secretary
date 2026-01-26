@@ -1,0 +1,22 @@
+send_message:
+  name: Send message
+  description: Sends a WhatsApp message to a contact.
+  fields:
+    sender:
+      name: Sender
+      description: The name of the WhatsApp account to send from (as defined during setup).
+      required: true
+      selector:
+        text:
+    contact:
+      name: Contact
+      description: The name of the contact or group to send the message to.
+      required: true
+      selector:
+        text:
+    message:
+      name: Message
+      description: The message to send.
+      required: true
+      selector:
+        text:

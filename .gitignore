@@ -1,0 +1,26 @@
+# Python
+__pycache__/
+*.pyc
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Virtual Environments
+venv/
+.venv/
+env/
+
+# Home Assistant / Project specific
+whatsapp_hass_sessions/
+whatsapp_logs/
+*.log
+
+# Web UI
+whatsapp_ui/whatsapp.db
+whatsapp_ui/config.json
+
+# Secrets (just in case)
+.env
+start_gemini_yolo.bat
+GEMINI.md
