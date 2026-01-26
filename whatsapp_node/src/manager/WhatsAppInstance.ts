@@ -70,10 +70,10 @@ export class WhatsAppInstance {
             // Log ALL incoming events for discovery
             this.sock.ev.process((events) => {
                 if (events['messaging-history.set']) console.log('DEBUG: Event -> messaging-history.set');
-                if (events['chats.set']) console.log('DEBUG: Event -> chats.set');
+                if ((events as any)['chats.set']) console.log('DEBUG: Event -> chats.set');
                 if (events['chats.upsert']) console.log('DEBUG: Event -> chats.upsert');
                 if (events['chats.update']) console.log('DEBUG: Event -> chats.update');
-                if (events['contacts.set']) console.log('DEBUG: Event -> contacts.set');
+                if ((events as any)['contacts.set']) console.log('DEBUG: Event -> contacts.set');
                 if (events['contacts.upsert']) console.log('DEBUG: Event -> contacts.upsert');
             });
         }
@@ -127,8 +127,6 @@ export class WhatsAppInstance {
             name = CASE WHEN excluded.name IS NOT NULL AND excluded.name != '' THEN excluded.name ELSE chats.name END,
             unread_count = excluded.unread_count
         `);
-
-        const evAny = this.sock.ev as any;
 
         this.sock.ev.on('messaging-history.set', (payload: any) => {
             const { chats } = payload;
