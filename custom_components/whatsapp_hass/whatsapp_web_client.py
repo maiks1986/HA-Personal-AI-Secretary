@@ -30,11 +30,36 @@ class WhatsAppWebClient:
         chrome_options.add_argument("--headless")
         chrome_options.add_argument("--no-sandbox")
         chrome_options.add_argument("--disable-dev-shm-usage")
+        
+        # Check for common binary paths (especially for Home Assistant/Docker)
+        import os
+        possible_binaries = [
+            "/usr/bin/chromium-browser",
+            "/usr/bin/chromium",
+            "/usr/bin/google-chrome",
+            "/usr/bin/google-chrome-stable",
+            "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe",
+            "C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe"
+        ]
+        for path in possible_binaries:
+            if os.path.exists(path):
+                chrome_options.binary_location = path
+                break
+
         if self._user_data_dir:
             chrome_options.add_argument(f"--user-data-dir={self._user_data_dir}")
         
-        service = Service(ChromeDriverManager().install())
-        self._driver = webdriver.Chrome(service=service, options=chrome_options)
+        try:
+            service = Service(ChromeDriverManager().install())
+            self._driver = webdriver.Chrome(service=service, options=chrome_options)
+        except Exception as e:
+            _LOGGER.error(f"Failed to start Chrome: {e}")
+            # Fallback for systems where webdriver-manager might fail but chromedriver is in PATH
+            try:
+                self._driver = webdriver.Chrome(options=chrome_options)
+            except Exception as e2:
+                _LOGGER.error(f"Fallback also failed: {e2}")
+                raise Exception("Google Chrome or Chromium is not installed or not found. Please install it on your Home Assistant server.")
         
         self._driver.get("https://web.whatsapp.com")
         
