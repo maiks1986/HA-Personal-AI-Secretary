@@ -66,6 +66,17 @@ async def async_setup_entry(hass, entry):
     if not hass.services.has_service(DOMAIN, "send_message"):
         hass.services.async_register(DOMAIN, "send_message", handle_send_message)
 
+    # Register Sidebar Panel
+    if web_ui_url:
+        hass.components.frontend.async_register_panel(
+            "iframe",
+            "whatsapp",
+            "mdi:whatsapp",
+            title="WhatsApp",
+            url=web_ui_url,
+            require_admin=True,
+        )
+
     return True
 
 def post_to_webhook(message_data, base_url):
@@ -196,5 +207,6 @@ async def async_unload_entry(hass, entry):
     
     if not hass.data[DOMAIN]:
         hass.services.async_remove(DOMAIN, "send_message")
+        hass.components.frontend.async_remove_panel("whatsapp")
     
     return True
