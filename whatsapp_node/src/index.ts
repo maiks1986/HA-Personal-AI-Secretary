@@ -135,6 +135,28 @@ async function bootstrap() {
         res.json({ id: newId, name });
     });
 
+    app.delete('/api/instances/:id', requireAuth, async (req, res) => {
+        const { id } = req.params;
+        const user = (req as any).haUser;
+        const instanceId = parseInt(id);
+
+        const instanceData = db.prepare('SELECT ha_user_id FROM instances WHERE id = ?').get(instanceId) as any;
+        if (!user.isAdmin && instanceData?.ha_user_id !== user.id) return res.status(403).json({ error: "Access Denied" });
+
+        console.log(`API: Hard resetting instance ${instanceId}`);
+        const instance = engineManager.getInstance(instanceId);
+        if (instance) {
+            await instance.deleteAuth();
+            await engineManager.stopInstance(instanceId);
+        }
+
+        db.prepare('DELETE FROM messages WHERE instance_id = ?').run(instanceId);
+        db.prepare('DELETE FROM chats WHERE instance_id = ?').run(instanceId);
+        db.prepare('DELETE FROM instances WHERE id = ?').run(instanceId);
+
+        res.json({ success: true });
+    });
+
     app.get('/api/messages/:instanceId/:jid', requireAuth, (req, res) => {
         const { instanceId, jid } = req.params;
         const user = (req as any).haUser;

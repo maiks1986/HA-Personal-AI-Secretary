@@ -12,6 +12,7 @@ import qrcode from 'qrcode';
 import db from '../db/database';
 import path from 'path';
 import fs from 'fs';
+import pino from 'pino';
 
 export class WhatsAppInstance {
     public id: number;
@@ -33,7 +34,7 @@ export class WhatsAppInstance {
         const { state, saveCreds } = await useMultiFileAuthState(this.authPath);
         const { version } = await fetchLatestBaileysVersion();
 
-        console.log(`Instance ${this.id}: Initializing with Baileys v${version.join('.')}`);
+        const logger = pino({ level: 'info' });
 
         this.sock = makeWASocket({
             version,
@@ -43,7 +44,8 @@ export class WhatsAppInstance {
             syncFullHistory: true,
             markOnlineOnConnect: true,
             connectTimeoutMs: 60000,
-            defaultQueryTimeoutMs: 120000
+            defaultQueryTimeoutMs: 120000,
+            logger: logger as any
         });
 
         this.sock.ev.on('connection.update', async (update: Partial<ConnectionState>) => {
@@ -56,7 +58,7 @@ export class WhatsAppInstance {
             }
 
             if (connection === 'open') {
-                console.log(`Instance ${this.id}: Connected successfully`);
+                console.log(`Instance ${this.id}: Connected`);
                 this.status = 'connected';
                 this.qr = null;
                 db.prepare('UPDATE instances SET status = ? WHERE id = ?').run('connected', this.id);
@@ -64,14 +66,10 @@ export class WhatsAppInstance {
 
             if (connection === 'close') {
                 const statusCode = (lastDisconnect?.error as Boom)?.output?.statusCode;
-                console.log(`Instance ${this.id}: Connection closed. Status: ${statusCode}`);
-                
                 this.status = 'disconnected';
                 db.prepare('UPDATE instances SET status = ? WHERE id = ?').run('disconnected', this.id);
                 
-                const shouldReconnect = statusCode !== DisconnectReason.loggedOut;
-                if (shouldReconnect) {
-                    console.log(`Instance ${this.id}: Reconnecting in 5s...`);
+                if (statusCode !== DisconnectReason.loggedOut) {
                     setTimeout(() => this.init(), 5000);
                 }
             }
@@ -87,80 +85,70 @@ export class WhatsAppInstance {
             unread_count = excluded.unread_count
         `);
 
-        // Track ALL events for debugging and robust discovery
-        this.sock.ev.process(async (events) => {
-            const anyEvents = events as any;
+        // Use any to bypass map limitations for discovery events
+        const evAny = this.sock.ev as any;
 
-            if (events['messaging-history.set']) {
-                const { chats, messages } = events['messaging-history.set'];
-                console.log(`Instance ${this.id}: [HistorySet] Syncing ${chats.length} chats`);
+        // History Sync
+        this.sock.ev.on('messaging-history.set', (payload: any) => {
+            const { chats } = payload;
+            if (chats) {
+                console.log(`Instance ${this.id}: [HistorySet] Found ${chats.length} chats`);
                 db.transaction(() => {
                     for (const chat of chats) {
                         upsertChat.run(this.id, chat.id, chat.name || chat.id.split('@')[0], chat.unreadCount || 0);
                     }
                 })();
             }
+        });
 
-            if (anyEvents['chats.set']) {
-                const { chats } = anyEvents['chats.set'];
-                console.log(`Instance ${this.id}: [ChatsSet] Received ${chats.length} chats`);
+        // Alternative sync paths
+        evAny.on('chats.set', (payload: any) => {
+            const { chats } = payload;
+            if (chats) {
+                console.log(`Instance ${this.id}: [ChatsSet] Found ${chats.length} chats`);
                 db.transaction(() => {
                     for (const chat of chats) {
                         upsertChat.run(this.id, chat.id, chat.name || chat.id.split('@')[0], chat.unreadCount || 0);
                     }
                 })();
             }
+        });
 
-            if (events['chats.upsert']) {
-                console.log(`Instance ${this.id}: [ChatsUpsert] ${events['chats.upsert'].length} items`);
-                for (const chat of events['chats.upsert']) {
-                    upsertChat.run(this.id, chat.id, chat.name || chat.id.split('@')[0], 0);
-                }
+        evAny.on('chats.upsert', (chats: any[]) => {
+            for (const chat of chats) {
+                upsertChat.run(this.id, chat.id, chat.name || chat.id.split('@')[0], 0);
             }
+        });
 
-            if (anyEvents['contacts.set']) {
-                const { contacts } = anyEvents['contacts.set'];
-                console.log(`Instance ${this.id}: [ContactsSet] Received ${contacts.length} contacts`);
-                db.transaction(() => {
-                    for (const contact of contacts) {
-                        upsertChat.run(this.id, contact.id, contact.name || contact.notify || contact.id.split('@')[0], 0);
-                    }
-                })();
+        evAny.on('contacts.upsert', (contacts: any[]) => {
+            for (const contact of contacts) {
+                upsertChat.run(this.id, contact.id, contact.name || contact.notify || contact.id.split('@')[0], 0);
             }
+        });
 
-            if (events['contacts.upsert']) {
-                console.log(`Instance ${this.id}: [ContactsUpsert] ${events['contacts.upsert'].length} items`);
-                for (const contact of events['contacts.upsert']) {
-                    upsertChat.run(this.id, contact.id, contact.name || contact.notify || contact.id.split('@')[0], 0);
-                }
-            }
+        // Messages
+        this.sock.ev.on('messages.upsert', async m => {
+            if (m.type === 'notify') {
+                for (const msg of m.messages) {
+                    const text = msg.message?.conversation || 
+                                 msg.message?.extendedTextMessage?.text || 
+                                 msg.message?.imageMessage?.caption || "";
+                    
+                    if (text) {
+                        const jid = msg.key.remoteJid!;
+                        db.prepare(`
+                            INSERT OR IGNORE INTO messages 
+                            (instance_id, chat_jid, sender_jid, sender_name, text, is_from_me) 
+                            VALUES (?, ?, ?, ?, ?, ?)
+                        `).run(this.id, jid, msg.key.participant || jid, msg.pushName || "Unknown", text, msg.key.fromMe ? 1 : 0);
 
-            if (events['messages.upsert']) {
-                const { messages: newMsgs, type } = events['messages.upsert'];
-                if (type === 'notify') {
-                    for (const msg of newMsgs) {
-                        const text = msg.message?.conversation || 
-                                     msg.message?.extendedTextMessage?.text || 
-                                     msg.message?.imageMessage?.caption || "";
-                        
-                        if (text) {
-                            const jid = msg.key.remoteJid!;
-                            console.log(`Instance ${this.id}: Message received from ${jid}`);
-                            
-                            db.prepare(`
-                                INSERT OR IGNORE INTO messages 
-                                (instance_id, chat_jid, sender_jid, sender_name, text, is_from_me) 
-                                VALUES (?, ?, ?, ?, ?, ?)
-                            `).run(this.id, jid, msg.key.participant || jid, msg.pushName || "Unknown", text, msg.key.fromMe ? 1 : 0);
-
-                            db.prepare(`
-                                INSERT INTO chats (instance_id, jid, last_message_text, last_message_timestamp)
-                                VALUES (?, ?, ?, CURRENT_TIMESTAMP)
-                                ON CONFLICT(instance_id, jid) DO UPDATE SET
-                                last_message_text = excluded.last_message_text,
-                                last_message_timestamp = CURRENT_TIMESTAMP
-                            `).run(this.id, jid, text);
-                        }
+                        db.prepare(`
+                            INSERT INTO chats (instance_id, jid, last_message_text, last_message_timestamp)
+                            VALUES (?, ?, ?, CURRENT_TIMESTAMP)
+                            ON CONFLICT(instance_id, jid) DO UPDATE SET
+                            last_message_text = excluded.last_message_text,
+                            last_message_timestamp = CURRENT_TIMESTAMP
+                        `).run(this.id, jid, text);
                     }
                 }
             }
@@ -183,9 +171,19 @@ export class WhatsAppInstance {
         `).run(text, this.id, jid);
     }
 
+    async deleteAuth() {
+        if (this.sock) {
+            try { await this.sock.logout(); } catch (e) {}
+            this.sock = null;
+        }
+        if (fs.existsSync(this.authPath)) {
+            fs.rmSync(this.authPath, { recursive: true, force: true });
+        }
+    }
+
     async close() {
         if (this.sock) {
-            this.sock.logout();
+            this.sock.end(undefined);
             this.sock = null;
         }
     }

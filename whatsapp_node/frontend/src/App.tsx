@@ -15,7 +15,9 @@ import {
   BrainCircuit,
   Eraser,
   Lock,
-  MessageSquare
+  MessageSquare,
+  AlertTriangle,
+  RotateCcw
 } from 'lucide-react';
 
 const updateAxiosAuth = (token: string | null) => {
@@ -68,6 +70,7 @@ const App = () => {
   const [geminiKey, setGeminiKey] = useState('');
   const [newInstanceName, setNewInstanceName] = useState('');
   const [isAiLoading, setIsAiLoading] = useState(false);
+  const [isReseting, setIsReseting] = useState(false);
   
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
@@ -198,6 +201,22 @@ const App = () => {
     fetchInstances();
   };
 
+  const handleHardReset = async () => {
+    if (!selectedInstance) return;
+    if (!confirm("This will log out the account and DELETE all local message history for this instance. Are you sure?")) return;
+    
+    setIsReseting(true);
+    try {
+      await axios.delete(`/api/instances/${selectedInstance.id}`);
+      setSelectedInstance(null);
+      fetchInstances();
+    } catch (e) {
+      alert("Failed to reset instance");
+    } finally {
+      setIsReseting(false);
+    }
+  };
+
   const handleSendMessage = async () => {
     if (!inputText || !selectedInstance || !selectedChat) return;
     try {
@@ -209,7 +228,7 @@ const App = () => {
       setInputText('');
       setSteerText('');
       fetchMessages(selectedInstance.id, selectedChat.jid);
-      fetchChats(selectedInstance.id); // Refresh last message in sidebar
+      fetchChats(selectedInstance.id);
     } catch (e) {
       alert("Failed to send");
     }
@@ -251,6 +270,17 @@ const App = () => {
             </div>
           ))}
           <button onClick={() => setIsAddingInstance(true)} className="w-12 h-12 rounded-2xl bg-white border-2 border-dashed border-slate-300 flex items-center justify-center text-slate-400 hover:border-teal-500 hover:text-teal-600 transition-all"><Plus size={24} /></button>
+          
+          <div className="mt-auto pb-4">
+            <button 
+              onClick={handleHardReset} 
+              disabled={!selectedInstance || isReseting}
+              className="p-3 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-xl transition-all disabled:opacity-30"
+              title="Hard Reset Current Account"
+            >
+              <RotateCcw size={20} className={isReseting ? 'spin' : ''} />
+            </button>
+          </div>
         </div>
 
         {/* Chat List */}
@@ -266,7 +296,18 @@ const App = () => {
             </div>
           </header>
           <div className="flex-1 overflow-y-auto">
-            {chats.length === 0 && selectedInstance?.status === 'connected' && <div className="p-10 text-center text-slate-400 text-sm italic font-medium">No conversations found. History might be syncing...</div>}
+            {chats.length === 0 && selectedInstance?.status === 'connected' && (
+              <div className="p-10 text-center flex flex-col items-center gap-4">
+                <RefreshCw size={32} className="text-teal-500 spin opacity-50" />
+                <p className="text-slate-400 text-sm italic font-medium leading-tight">No conversations found yet.<br/>Your phone might be busy syncing history.</p>
+                <div className="bg-amber-50 p-4 rounded-xl border border-amber-100 mt-4">
+                  <div className="flex items-center gap-2 text-amber-700 font-bold text-[10px] uppercase mb-1">
+                    <AlertTriangle size={12} /> Sync Tip
+                  </div>
+                  <p className="text-[10px] text-amber-600 leading-tight">Keep WhatsApp open on your phone and stay on the 'Linked Devices' screen to speed this up.</p>
+                </div>
+              </div>
+            )}
             {chats.map(chat => (
               <div 
                 key={chat.jid}
