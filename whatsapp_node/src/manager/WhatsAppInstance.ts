@@ -85,7 +85,7 @@ export class WhatsAppInstance {
 
                         // Aggressive Subscription for sync data
                         if (this.sock) {
-                            this.sock.upsertMessageFeedback({ remoteJid: 'status@broadcast', participant: 'me', key: { id: 'sync' } } as any);
+                            (this.sock as any).upsertMessageFeedback({ remoteJid: 'status@broadcast', participant: 'me', key: { id: 'sync' } } as any);
                         }
                         
                         this.startSyncWatchdog();
