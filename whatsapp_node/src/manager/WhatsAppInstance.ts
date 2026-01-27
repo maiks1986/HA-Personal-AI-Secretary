@@ -226,8 +226,22 @@ export class WhatsAppInstance {
             evAny.on('events', (events: any) => {
                 const names = Object.keys(events);
                 if (names.length > 0) {
-                    console.log(`TRACE [Instance ${this.id}]: Heartbeat -> [${names.join(', ')}]`);
-                    this.io.emit('raw_whatsapp_event', { instanceId: this.id, events });
+                    const logEntry = JSON.stringify({
+                        timestamp: new Date().toISOString(),
+                        instanceId: this.id,
+                        events
+                    });
+                    
+                    // 1. Broadcast to live debug clients
+                    this.io.emit('raw_whatsapp_event', JSON.parse(logEntry));
+
+                    // 2. Append to persistent log file
+                    try {
+                        const logPath = process.env.NODE_ENV === 'development' ? './raw_events.log' : '/data/raw_events.log';
+                        fs.appendFileSync(logPath, logEntry + '\n');
+                    } catch (e) {
+                        console.error('TRACE [Instance ' + this.id + ']: Failed to write to raw_events.log', e);
+                    }
                 }
             });
 

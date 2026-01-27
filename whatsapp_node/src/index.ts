@@ -224,6 +224,22 @@ async function bootstrap() {
         res.json(stats);
     });
 
+    app.get('/api/debug/raw_logs', requireAuth, (req, res) => {
+        const limit = parseInt(req.query.limit as string) || 50;
+        const logPath = process.env.NODE_ENV === 'development' ? './raw_events.log' : '/data/raw_events.log';
+        
+        if (!fs.existsSync(logPath)) return res.json([]);
+
+        try {
+            const data = fs.readFileSync(logPath, 'utf8');
+            const lines = data.trim().split('\n').slice(-limit);
+            const logs = lines.map(l => JSON.parse(l));
+            res.json(logs);
+        } catch (e) {
+            res.status(500).json({ error: "Failed to read logs" });
+        }
+    });
+
     app.post('/api/instances', requireAuth, async (req, res) => {
         const { name } = req.body;
         const user = (req as any).haUser;
