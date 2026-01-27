@@ -326,6 +326,13 @@ async function bootstrap() {
 
     io.on('connection', (socket) => {
         console.log(`TRACE [WebSocket]: Client connected (${socket.id})`);
+        
+        // Debug: Listen for raw event requests
+        socket.on('subscribe_raw_events', () => {
+            console.log(`TRACE [WebSocket]: Client ${socket.id} subscribed to raw events`);
+            (socket as any).raw_debug = true;
+        });
+
         let lastStatusJson = '';
         const interval = setInterval(() => {
             const allInstances = engineManager.getAllInstances();

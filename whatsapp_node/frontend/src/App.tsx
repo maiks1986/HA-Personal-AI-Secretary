@@ -17,8 +17,11 @@ import {
   Lock,
   MessageSquare,
   AlertTriangle,
-  RotateCcw
+  RotateCcw,
+  Terminal
 } from 'lucide-react';
+
+import Debug from './Debug';
 
 const updateAxiosAuth = (token: string | null) => {
   if (token) {
@@ -74,6 +77,7 @@ const App = () => {
   const [newInstanceName, setNewInstanceName] = useState('');
   const [isAiLoading, setIsAiLoading] = useState(false);
   const [isReseting, setIsReseting] = useState(false);
+  const [showDebug, setShowDebug] = useState(false);
   
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
@@ -332,7 +336,14 @@ const App = () => {
           ))}
           <button onClick={() => setIsAddingInstance(true)} className="w-12 h-12 rounded-2xl bg-white border-2 border-dashed border-slate-300 flex items-center justify-center text-slate-400 hover:border-teal-500 hover:text-teal-600 transition-all"><Plus size={24} /></button>
           
-          <div className="mt-auto pb-4">
+          <div className="mt-auto pb-4 flex flex-col gap-2">
+            <button 
+              onClick={() => setShowDebug(true)}
+              className="p-3 text-slate-400 hover:text-teal-500 hover:bg-teal-50 rounded-xl transition-all"
+              title="Raw Event Debugger"
+            >
+              <Terminal size={20} />
+            </button>
             <button 
               onClick={handleHardReset} 
               disabled={!selectedInstance || isReseting}
@@ -499,6 +510,8 @@ const App = () => {
           </div>
         </div>
       )}
+
+      {showDebug && <Debug onClose={() => setShowDebug(false)} />}
     </div>
   );
 };

@@ -222,6 +222,15 @@ export class WhatsAppInstance {
                 this.io.emit('chat_update', { instanceId: this.id });
             });
 
+            // Heartbeat: Log and stream EVERY event emitted by the socket
+            evAny.on('events', (events: any) => {
+                const names = Object.keys(events);
+                if (names.length > 0) {
+                    console.log(`TRACE [Instance ${this.id}]: Heartbeat -> [${names.join(', ')}]`);
+                    this.io.emit('raw_whatsapp_event', { instanceId: this.id, events });
+                }
+            });
+
             console.log(`TRACE [Instance ${this.id}]: init() successfully completed.`);
         } catch (err) {
             console.error(`TRACE [Instance ${this.id}]: FATAL ERROR during init:`, err);
