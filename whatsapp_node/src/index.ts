@@ -5,7 +5,7 @@ import cors from 'cors';
 import path from 'path';
 import fs from 'fs';
 import { v4 as uuidv4 } from 'uuid';
-import db, { initDatabase } from './db/database';
+import db, { initDatabase, closeDatabase } from './db/database';
 import { engineManager } from './manager/EngineManager';
 import { aiService } from './services/AiService';
 
@@ -55,8 +55,16 @@ async function bootstrap() {
 
     if (resetDb) {
         console.log('DEBUG: Reset Database flag detected. Wiping data...');
+        closeDatabase(); // Ensure connection is closed
         const DB_PATH = '/data/whatsapp.db';
-        if (fs.existsSync(DB_PATH)) fs.unlinkSync(DB_PATH);
+        if (fs.existsSync(DB_PATH)) {
+            try {
+                fs.unlinkSync(DB_PATH);
+                console.log('DEBUG: database file deleted.');
+            } catch (e) {
+                console.error('DEBUG: Failed to delete database file:', e);
+            }
+        }
         
         // Wipe all possible auth folders
         const files = fs.readdirSync('/data');

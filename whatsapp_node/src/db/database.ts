@@ -84,4 +84,11 @@ export function initDatabase() {
     console.log('Database initialized successfully at', DB_PATH);
 }
 
+export function closeDatabase() {
+    if (db) {
+        db.close();
+        console.log('Database connection closed.');
+    }
+}
+
 export default db;
