@@ -111,14 +111,32 @@ const App = () => {
 
   useEffect(() => {
     if (authState !== 'authenticated') return;
+    
     socket.on('instances_status', (statusUpdates: any[]) => {
       setInstances(prev => prev.map(inst => {
         const update = statusUpdates.find(u => u.id === inst.id);
         return update ? { ...inst, status: update.status, qr: update.qr } : inst;
       }));
     });
-    return () => { socket.off('instances_status'); };
-  }, [authState]);
+
+    socket.on('chat_update', (data: { instanceId: number }) => {
+      if (selectedInstance?.id === data.instanceId) {
+        fetchChats(data.instanceId);
+      }
+    });
+
+    socket.on('new_message', (data: { instanceId: number, jid: string, text: string }) => {
+      if (selectedInstance?.id === data.instanceId && selectedChat?.jid === data.jid) {
+        fetchMessages(data.instanceId, data.jid);
+      }
+    });
+
+    return () => { 
+      socket.off('instances_status');
+      socket.off('chat_update');
+      socket.off('new_message');
+    };
+  }, [authState, selectedInstance, selectedChat]);
 
   useEffect(() => {
     if (selectedInstance && selectedInstance.status === 'connected') {
@@ -360,7 +378,7 @@ const App = () => {
             </header>
 
             <div className="flex-1 overflow-y-auto p-6 flex flex-col gap-2 bg-[#efeae2] bg-[url('https://user-images.githubusercontent.com/15075759/28719144-86dc0f70-73b1-11e7-911d-60d70fcded21.png')] bg-repeat relative">
-              {messages.map((m) => (
+              {messages.sort((a, b) => a.id - b.id).map((m) => (
                 <div key={m.id} className={`max-w-[75%] p-2 px-3 rounded-xl shadow-sm text-sm relative animate-in fade-in slide-in-from-bottom-1 duration-200 ${m.is_from_me ? 'bg-whatsapp-bubble self-end rounded-tr-none' : 'bg-white self-start rounded-tl-none'}`}>
                   <div className="leading-relaxed whitespace-pre-wrap text-slate-800">{m.text}</div>
                   <div className="text-[9px] text-slate-400 text-right mt-1 font-bold uppercase tracking-widest">{new Date(m.timestamp).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</div>

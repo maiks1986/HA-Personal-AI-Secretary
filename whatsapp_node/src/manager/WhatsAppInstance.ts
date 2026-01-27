@@ -26,10 +26,12 @@ export class WhatsAppInstance {
     private watchdogTimer: NodeJS.Timeout | null = null;
     private isReconnecting: boolean = false;
     private debugEnabled: boolean;
+    private io: any;
 
-    constructor(id: number, name: string, debugEnabled: boolean = false) {
+    constructor(id: number, name: string, io: any, debugEnabled: boolean = false) {
         this.id = id;
         this.name = name;
+        this.io = io;
         this.debugEnabled = debugEnabled;
         this.authPath = process.env.NODE_ENV === 'development'
             ? path.join(__dirname, `../../auth_info_${id}`)
@@ -210,56 +212,62 @@ export class WhatsAppInstance {
                         console.log(`TRACE [Instance ${this.id}]: Linked ${msgCount} history messages.`);
                     }
                 })();
+                this.io.emit('chat_update', { instanceId: this.id });
             });
 
-                this.sock.ev.on('messages.upsert', (m: any) => {
-                    if (m.type === 'notify') {
-                        console.log(`TRACE [Instance ${this.id}]: messages.upsert (${m.messages.length} msgs)`);
-                        for (const msg of m.messages) {
-                            const text = getMessageText(msg);
-                            if (text && isJidValid(msg.key.remoteJid!)) {
-                                const jid = msg.key.remoteJid!;
-                                const ts = msg.messageTimestamp ? new Date(Number(msg.messageTimestamp) * 1000).toISOString() : new Date().toISOString();
-                                upsertChat.run(this.id, jid, msg.pushName || jid.split('@')[0], 0, ts);
-                                insertMessage.run(this.id, jid, msg.key.participant || jid, msg.pushName || "Unknown", text, msg.key.fromMe ? 1 : 0, ts);
-                                dbInstance.prepare(`UPDATE chats SET last_message_text = ?, last_message_timestamp = ? WHERE instance_id = ? AND jid = ?`).run(text, ts, this.id, jid);
-                            }
+            this.sock.ev.on('messages.upsert', (m: any) => {
+                if (m.type === 'notify') {
+                    console.log(`TRACE [Instance ${this.id}]: messages.upsert (${m.messages.length} msgs)`);
+                    for (const msg of m.messages) {
+                        const text = getMessageText(msg);
+                        if (text && isJidValid(msg.key.remoteJid!)) {
+                            const jid = msg.key.remoteJid!;
+                            const ts = msg.messageTimestamp ? new Date(Number(msg.messageTimestamp) * 1000).toISOString() : new Date().toISOString();
+                            upsertChat.run(this.id, jid, getChatName(jid, msg.pushName), 0, ts);
+                            insertMessage.run(this.id, jid, msg.key.participant || jid, msg.pushName || "Unknown", text, msg.key.fromMe ? 1 : 0, ts);
+                            dbInstance.prepare(`UPDATE chats SET last_message_text = ?, last_message_timestamp = ? WHERE instance_id = ? AND jid = ? AND (last_message_timestamp IS NULL OR ? >= last_message_timestamp)`).run(text, ts, this.id, jid, ts);
+                            
+                            this.io.emit('new_message', { instanceId: this.id, jid, text });
+                            this.io.emit('chat_update', { instanceId: this.id });
                         }
                     }
-                });
+                }
+            });
 
-                // Extra fallback listeners for individual updates
-                const evAny = this.sock.ev as any;
-                evAny.on('chats.upsert', (chats: any[]) => {
-                    console.log(`TRACE [Instance ${this.id}]: chats.upsert (${chats.length} items)`);
-                    dbInstance.transaction(() => {
-                        for (const chat of chats) {
-                            if (!isJidValid(chat.id)) continue;
-                            const ts = chat.conversationTimestamp || chat.lastMessageRecvTimestamp;
-                            const isoTs = ts ? new Date(Number(ts) * 1000).toISOString() : null;
-                            upsertChat.run(this.id, chat.id, chat.name || chat.id.split('@')[0], chat.unreadCount || 0, isoTs);
-                        }
-                    })();
-                });
+            // Extra fallback listeners for individual updates
+            const evAny = this.sock.ev as any;
+            evAny.on('chats.upsert', (chats: any[]) => {
+                console.log(`TRACE [Instance ${this.id}]: chats.upsert (${chats.length} items)`);
+                dbInstance.transaction(() => {
+                    for (const chat of chats) {
+                        if (!isJidValid(chat.id)) continue;
+                        const ts = chat.conversationTimestamp || chat.lastMessageRecvTimestamp;
+                        const isoTs = ts ? new Date(Number(ts) * 1000).toISOString() : null;
+                        upsertChat.run(this.id, chat.id, chat.name || chat.id.split('@')[0], chat.unreadCount || 0, isoTs);
+                    }
+                })();
+                this.io.emit('chat_update', { instanceId: this.id });
+            });
 
-                evAny.on('contacts.upsert', (contacts: any[]) => {
-                    console.log(`TRACE [Instance ${this.id}]: contacts.upsert (${contacts.length} items)`);
-                    dbInstance.transaction(() => {
-                        for (const contact of contacts) {
-                            if (isJidValid(contact.id)) {
-                                const name = contact.name || contact.notify;
-                                if (name) upsertContact.run(this.id, contact.id, name);
-                            }
+            evAny.on('contacts.upsert', (contacts: any[]) => {
+                console.log(`TRACE [Instance ${this.id}]: contacts.upsert (${contacts.length} items)`);
+                dbInstance.transaction(() => {
+                    for (const contact of contacts) {
+                        if (isJidValid(contact.id)) {
+                            const name = contact.name || contact.notify;
+                            if (name) upsertContact.run(this.id, contact.id, name);
                         }
-                                    })();
-                                });
-                    
-                                console.log(`TRACE [Instance ${this.id}]: init() successfully completed.`);
-                            }
-                            } catch (err) {
-                                console.error(`TRACE [Instance ${this.id}]: FATAL ERROR during init:`, err);
-                            }
-                        }
+                    }
+                })();
+                this.io.emit('chat_update', { instanceId: this.id });
+            });
+
+            console.log(`TRACE [Instance ${this.id}]: init() successfully completed.`);
+        } catch (err) {
+            console.error(`TRACE [Instance ${this.id}]: FATAL ERROR during init:`, err);
+        }
+    }
+
     private startSyncWatchdog(immediate: boolean = false) {
         this.stopSyncWatchdog();
         const timeout = immediate ? 30000 : 300000; // Wait 30s for fast check, 5m for regular

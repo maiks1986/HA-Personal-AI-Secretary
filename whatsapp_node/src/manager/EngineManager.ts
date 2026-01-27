@@ -4,9 +4,11 @@ import { WhatsAppInstance } from './WhatsAppInstance';
 class EngineManager {
     private instances: Map<number, WhatsAppInstance> = new Map();
     private debugEnabled: boolean = false;
+    private io: any = null;
 
-    async init(debugEnabled: boolean = false) {
+    async init(io: any, debugEnabled: boolean = false) {
         console.log('TRACE [EngineManager]: init() called');
+        this.io = io;
         this.debugEnabled = debugEnabled;
         const db = getDb();
         // Load all instances from DB
@@ -24,7 +26,7 @@ class EngineManager {
             return this.instances.get(id);
         }
         
-        const instance = new WhatsAppInstance(id, name, this.debugEnabled);
+        const instance = new WhatsAppInstance(id, name, this.io, this.debugEnabled);
         await instance.init();
         this.instances.set(id, instance);
         return instance;

@@ -105,7 +105,7 @@ async function bootstrap() {
     const debugEnabled = config.debug_logging === true || config.debug_logging === 'true';
     if (debugEnabled) console.log('DEBUG: Verbose logging enabled');
     
-    await engineManager.init(debugEnabled);
+    await engineManager.init(io, debugEnabled);
 
     app.use((req, res, next) => {
         console.log(`TRACE [Server]: Incoming ${req.method} ${req.path}`);
