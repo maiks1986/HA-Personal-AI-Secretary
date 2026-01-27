@@ -161,21 +161,29 @@ export class WhatsAppInstance {
 
             this.sock.ev.on('messaging-history.set', async (payload: any) => {
                 const { chats, contacts, messages } = payload;
-                console.log(`TRACE [Instance ${this.id}]: HistorySet -> Chats: ${chats?.length || 0}, Contacts: ${contacts?.length || 0}, Messages: ${messages?.length || 0}`);
+                console.log(`TRACE [Instance ${this.id}]: messaging-history.set -> Chats: ${chats?.length || 0}, Contacts: ${contacts?.length || 0}, Messages: ${messages?.length || 0}`);
                 
                 dbInstance.transaction(() => {
-                    // 1. Process Contacts
+                    // 1. Process Contacts (Identity only)
                     if (contacts) {
                         for (const contact of contacts) {
                             if (!isJidValid(contact.id)) continue;
                             const name = contact.name || contact.notify;
                             if (name) upsertContact.run(this.id, contact.id, name);
-                            else dbInstance.prepare('INSERT OR IGNORE INTO contacts (instance_id, jid, name) VALUES (?, ?, ?)').run(this.id, contact.id, contact.id.split('@')[0]);
                         }
                     }
 
-                    // 2. Process Messages and track the latest one per chat for the preview
-                    const latestMsgs = new Map<string, { text: string, ts: string }>();
+                    // 2. Initial Chat Pass (Metadata only)
+                    if (chats) {
+                        for (const chat of chats) {
+                            if (!isJidValid(chat.id)) continue;
+                            const ts = chat.conversationTimestamp || chat.lastMessageRecvTimestamp;
+                            const isoTs = ts ? new Date(Number(ts) * 1000).toISOString() : null;
+                            upsertChat.run(this.id, chat.id, chat.name || chat.id.split('@')[0], chat.unreadCount || 0, isoTs);
+                        }
+                    }
+
+                    // 3. Process Messages & Force Chat Links
                     if (messages) {
                         let msgCount = 0;
                         for (const msg of messages) {
@@ -184,35 +192,25 @@ export class WhatsAppInstance {
                                 const jid = msg.key.remoteJid!;
                                 const ts = msg.messageTimestamp ? new Date(Number(msg.messageTimestamp) * 1000).toISOString() : new Date().toISOString();
                                 
-                                // Store message
+                                // Ensure chat exists for this message
+                                upsertChat.run(this.id, jid, msg.pushName || jid.split('@')[0], 0, ts);
+                                
+                                // Save Message
                                 insertMessage.run(this.id, jid, msg.key.participant || jid, msg.pushName || "Unknown", text, msg.key.fromMe ? 1 : 0, ts);
+                                
+                                // Update Chat with latest info (Simple check: if this msg is newer than what's there)
+                                dbInstance.prepare(`
+                                    UPDATE chats 
+                                    SET last_message_text = ?, last_message_timestamp = ? 
+                                    WHERE instance_id = ? AND jid = ? 
+                                      AND (last_message_timestamp IS NULL OR ? >= last_message_timestamp)
+                                `).run(text, ts, this.id, jid, ts);
                                 msgCount++;
-
-                                // Track latest for preview
-                                if (!latestMsgs.has(jid) || ts > latestMsgs.get(jid)!.ts) {
-                                    latestMsgs.set(jid, { text, ts });
-                                }
                             }
                         }
-                        console.log(`TRACE [Instance ${this.id}]: Imported ${msgCount} history messages`);
-                    }
-
-                    // 3. Process Chats with the identified latest message
-                    if (chats) {
-                        for (const chat of chats) {
-                            if (!isJidValid(chat.id)) continue;
-                            const preview = latestMsgs.get(chat.id);
-                            const ts = preview?.ts || (chat.conversationTimestamp ? new Date(Number(chat.conversationTimestamp) * 1000).toISOString() : null);
-                            
-                            upsertChat.run(this.id, chat.id, chat.name || chat.id.split('@')[0], chat.unreadCount || 0, ts);
-                            
-                            if (preview) {
-                                dbInstance.prepare('UPDATE chats SET last_message_text = ? WHERE instance_id = ? AND jid = ?').run(preview.text, this.id, chat.id);
-                            }
-                        }
+                        console.log(`TRACE [Instance ${this.id}]: Successfully linked ${msgCount} history messages to chats.`);
                     }
                 })();
-                console.log(`TRACE [Instance ${this.id}]: HistorySet Sync Complete`);
             });
 
                 this.sock.ev.on('messages.upsert', (m: any) => {
