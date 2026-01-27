@@ -248,7 +248,7 @@ export class WhatsAppInstance {
                         }
     private startSyncWatchdog(immediate: boolean = false) {
         this.stopSyncWatchdog();
-        const timeout = immediate ? 10000 : 300000;
+        const timeout = immediate ? 30000 : 300000; // Wait 30s for fast check, 5m for regular
         console.log(`TRACE [Instance ${this.id}]: Sync Watchdog scheduled in ${timeout/1000}s`);
         this.watchdogTimer = setTimeout(async () => {
             console.log(`TRACE [Instance ${this.id}]: Sync Watchdog executing check...`);
@@ -258,24 +258,29 @@ export class WhatsAppInstance {
 
             if (chatCount === 0) {
                 this.syncRetryCount++;
-                console.log(`Instance ${this.id}: Watchdog alert! No chats found in DB after ${timeout/1000}s. Attempt ${this.syncRetryCount}/${this.maxSyncRetries}`);
+                console.log(`Instance ${this.id}: No data received after ${timeout/1000}s. Attempt ${this.syncRetryCount}/${this.maxSyncRetries}`);
                 
                 if (this.syncRetryCount < this.maxSyncRetries) {
                     if (this.isReconnecting) return;
                     this.isReconnecting = true;
-                    console.log(`Instance ${this.id}: Triggering soft restart to force sync...`);
-                    if (this.sock) {
-                        try { 
-                            this.sock.end(undefined); 
-                            this.sock = null;
-                        } catch (e) {}
+                    
+                    // If we've tried 3 soft restarts and still nothing, force a Hard Relink (Delete session)
+                    if (this.syncRetryCount >= 3) {
+                        console.log(`TRACE [Instance ${this.id}]: Sync stuck after 3 attempts. FORCING HARD RELINK (Clearing session)...`);
+                        await this.deleteAuth();
+                    } else {
+                        console.log(`TRACE [Instance ${this.id}]: Triggering soft restart to nudge sync...`);
+                        if (this.sock) {
+                            try { this.sock.end(undefined); this.sock = null; } catch (e) {}
+                        }
                     }
+
                     setTimeout(async () => {
                         this.isReconnecting = false;
                         await this.init();
                     }, 5000);
                 } else {
-                    console.error(`Instance ${this.id}: Reached max sync retries. Please check if the account is actually active or try a Hard Reset.`);
+                    console.error(`Instance ${this.id}: Reached max sync retries. Sync failed.`);
                 }
             } else {
                 console.log(`Instance ${this.id}: Watchdog satisfied. Found ${chatCount} chats in database.`);
