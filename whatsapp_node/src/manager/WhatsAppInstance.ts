@@ -154,36 +154,40 @@ export class WhatsAppInstance {
                 }
             });
 
+            const getChatName = (jid: string, existingName?: string | null) => {
+                if (existingName && existingName !== jid && !existingName.includes('@')) return existingName;
+                if (jid.endsWith('@g.us')) return 'Unnamed Group';
+                return jid.split('@')[0];
+            };
+
             this.sock.ev.on('creds.update', () => {
-                    console.log(`TRACE [Instance ${this.id}]: creds.update`);
-                    saveCreds();
-                });
+                console.log(`TRACE [Instance ${this.id}]: creds.update`);
+                saveCreds();
+            });
 
             this.sock.ev.on('messaging-history.set', async (payload: any) => {
                 const { chats, contacts, messages } = payload;
-                console.log(`TRACE [Instance ${this.id}]: messaging-history.set -> Chats: ${chats?.length || 0}, Contacts: ${contacts?.length || 0}, Messages: ${messages?.length || 0}`);
+                console.log(`TRACE [Instance ${this.id}]: history.set -> Chats: ${chats?.length || 0}, Contacts: ${contacts?.length || 0}, Messages: ${messages?.length || 0}`);
                 
                 dbInstance.transaction(() => {
-                    // 1. Process Contacts (Identity only)
                     if (contacts) {
                         for (const contact of contacts) {
                             if (!isJidValid(contact.id)) continue;
-                            const name = contact.name || contact.notify;
+                            const name = contact.name || contact.notify || (contact as any).verifiedName;
                             if (name) upsertContact.run(this.id, contact.id, name);
                         }
                     }
 
-                    // 2. Initial Chat Pass (Metadata only)
                     if (chats) {
                         for (const chat of chats) {
                             if (!isJidValid(chat.id)) continue;
                             const ts = chat.conversationTimestamp || chat.lastMessageRecvTimestamp;
                             const isoTs = ts ? new Date(Number(ts) * 1000).toISOString() : null;
-                            upsertChat.run(this.id, chat.id, chat.name || chat.id.split('@')[0], chat.unreadCount || 0, isoTs);
+                            const name = getChatName(chat.id, chat.name);
+                            upsertChat.run(this.id, chat.id, name, chat.unreadCount || 0, isoTs);
                         }
                     }
 
-                    // 3. Process Messages & Force Chat Links
                     if (messages) {
                         let msgCount = 0;
                         for (const msg of messages) {
@@ -191,24 +195,13 @@ export class WhatsAppInstance {
                             if (text && isJidValid(msg.key.remoteJid!)) {
                                 const jid = msg.key.remoteJid!;
                                 const ts = msg.messageTimestamp ? new Date(Number(msg.messageTimestamp) * 1000).toISOString() : new Date().toISOString();
-                                
-                                // Ensure chat exists for this message
-                                upsertChat.run(this.id, jid, msg.pushName || jid.split('@')[0], 0, ts);
-                                
-                                // Save Message
+                                upsertChat.run(this.id, jid, getChatName(jid, msg.pushName), 0, ts);
                                 insertMessage.run(this.id, jid, msg.key.participant || jid, msg.pushName || "Unknown", text, msg.key.fromMe ? 1 : 0, ts);
-                                
-                                // Update Chat with latest info (Simple check: if this msg is newer than what's there)
-                                dbInstance.prepare(`
-                                    UPDATE chats 
-                                    SET last_message_text = ?, last_message_timestamp = ? 
-                                    WHERE instance_id = ? AND jid = ? 
-                                      AND (last_message_timestamp IS NULL OR ? >= last_message_timestamp)
-                                `).run(text, ts, this.id, jid, ts);
+                                dbInstance.prepare(`UPDATE chats SET last_message_text = ?, last_message_timestamp = ? WHERE instance_id = ? AND jid = ? AND (last_message_timestamp IS NULL OR ? >= last_message_timestamp)`).run(text, ts, this.id, jid, ts);
                                 msgCount++;
                             }
                         }
-                        console.log(`TRACE [Instance ${this.id}]: Successfully linked ${msgCount} history messages to chats.`);
+                        console.log(`TRACE [Instance ${this.id}]: Linked ${msgCount} history messages.`);
                     }
                 })();
             });
