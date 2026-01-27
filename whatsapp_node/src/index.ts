@@ -92,10 +92,9 @@ async function bootstrap() {
             db.transaction(() => {
                 db.prepare('DELETE FROM messages').run();
                 db.prepare('DELETE FROM chats').run();
-                db.prepare('DELETE FROM contacts').run();
+                // contacts are now preserved to maintain identity across resets
             })();
-            console.log('DEBUG: Activity data wiped. Optimizing database...');
-            db.exec('VACUUM'); // Flushes changes and compacts file
+            console.log('DEBUG: Activity data wiped. (Instances, Settings, and Contacts preserved)');
             console.log('DEBUG: Optimization complete.');
             await new Promise(resolve => setTimeout(resolve, 3000));
         } catch (e) {

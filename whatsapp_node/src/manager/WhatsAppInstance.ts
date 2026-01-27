@@ -170,19 +170,25 @@ export class WhatsAppInstance {
                 console.log(`TRACE [Instance ${this.id}]: history.set -> Chats: ${chats?.length || 0}, Contacts: ${contacts?.length || 0}, Messages: ${messages?.length || 0}`);
                 
                 dbInstance.transaction(() => {
+                    // 1. Process Contacts (Identity) - Only save if it's a REAL name
                     if (contacts) {
                         for (const contact of contacts) {
                             if (!isJidValid(contact.id)) continue;
                             const name = contact.name || contact.notify || (contact as any).verifiedName;
-                            if (name) upsertContact.run(this.id, contact.id, name);
+                            // Only save to contacts table if we have an actual name (not just the JID)
+                            if (name && name !== contact.id && !name.includes('@')) {
+                                upsertContact.run(this.id, contact.id, name);
+                            }
                         }
                     }
 
+                    // 2. Initial Chat Pass
                     if (chats) {
                         for (const chat of chats) {
                             if (!isJidValid(chat.id)) continue;
                             const ts = chat.conversationTimestamp || chat.lastMessageRecvTimestamp;
                             const isoTs = ts ? new Date(Number(ts) * 1000).toISOString() : null;
+                            // Use JID as fallback name in the chats table
                             const name = getChatName(chat.id, chat.name);
                             upsertChat.run(this.id, chat.id, name, chat.unreadCount || 0, isoTs);
                         }
