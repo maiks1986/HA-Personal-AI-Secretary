@@ -104,64 +104,20 @@ export class WhatsAppInstance {
                 return jid && !jid.includes('@broadcast') && jid !== 'status@broadcast';
             };
 
-            if (this.sock) {
-                // Catch-all tracer for raw events
-                this.sock.ev.on('connection.update', (update) => {
-                    console.log(`TRACE [Instance ${this.id}]: Event -> connection.update`, JSON.stringify(update));
-                });
-            }
-
-            // Direct listeners for maximum reliability
-            if (this.sock) {
-                this.sock.ev.on('connection.update', async (update: Partial<ConnectionState>) => {
-                const { connection, lastDisconnect, qr } = update;
-                console.log(`TRACE [Instance ${this.id}]: connection.update ->`, connection || 'poll');
-                
-                if (qr) {
-                    this.qr = await qrcode.toDataURL(qr);
-                    this.status = 'qr_ready';
+            const normalizeJid = (jid: string) => {
+                if (!jid) return jid;
+                if (jid.includes(':')) {
+                    // user:1@s.whatsapp.net -> user@s.whatsapp.net
+                    return jid.replace(/:[0-9]+@/, '@');
                 }
-                if (connection === 'open') {
-                    console.log(`TRACE [Instance ${this.id}]: Connection OPEN. Starting discovery...`);
-                    this.status = 'connected';
-                    this.qr = null;
-                    dbInstance.prepare('UPDATE instances SET status = ? WHERE id = ?').run('connected', this.id);
-                    
-                    const row = dbInstance.prepare('SELECT COUNT(*) as count FROM chats WHERE instance_id = ?').get(this.id) as any;
-                    const isEmpty = row?.count === 0;
-                    this.startSyncWatchdog(isEmpty);
-                }
-                if (connection === 'close') {
-                    const statusCode = (lastDisconnect?.error as Boom)?.output?.statusCode;
-                    console.log(`TRACE [Instance ${this.id}]: Connection CLOSED (Status: ${statusCode})`);
-                    this.status = 'disconnected';
-                    this.sock = null;
-                    this.stopSyncWatchdog();
-                    dbInstance.prepare('UPDATE instances SET status = ? WHERE id = ?').run('disconnected', this.id);
-                    if (statusCode === DisconnectReason.loggedOut) {
-                        console.log(`TRACE [Instance ${this.id}]: Logged out. Wiping session...`);
-                        await this.deleteAuth();
-                        await this.init();
-                    } else {
-                        if (this.isReconnecting) return;
-                        this.isReconnecting = true;
-                        setTimeout(async () => { this.isReconnecting = false; await this.init(); }, 5000);
-                    }
-                }
-            });
-
-            // Heartbeat: Log EVERY event emitted by the socket
-            (this.sock.ev as any).on('events', (events: any) => {
-                const names = Object.keys(events);
-                if (names.length > 0) {
-                    console.log(`TRACE [Instance ${this.id}]: Heartbeat -> [${names.join(', ')}]`);
-                }
-            });
+                return jid;
+            };
 
             const getChatName = (jid: string, existingName?: string | null) => {
-                if (existingName && existingName !== jid && !existingName.includes('@')) return existingName;
-                if (jid.endsWith('@g.us')) return 'Unnamed Group';
-                return jid.split('@')[0];
+                const normalized = normalizeJid(jid);
+                if (existingName && existingName !== normalized && !existingName.includes('@')) return existingName;
+                if (normalized.endsWith('@g.us')) return 'Unnamed Group';
+                return normalized.split('@')[0];
             };
 
             this.sock.ev.on('creds.update', () => {
@@ -174,14 +130,14 @@ export class WhatsAppInstance {
                 console.log(`TRACE [Instance ${this.id}]: history.set -> Chats: ${chats?.length || 0}, Contacts: ${contacts?.length || 0}, Messages: ${messages?.length || 0}`);
                 
                 dbInstance.transaction(() => {
-                    // 1. Process Contacts (Identity) - Only save if it's a REAL name
+                    // 1. Process Contacts
                     if (contacts) {
                         for (const contact of contacts) {
                             if (!isJidValid(contact.id)) continue;
+                            const normalized = normalizeJid(contact.id);
                             const name = contact.name || contact.notify || (contact as any).verifiedName;
-                            // Only save to contacts table if we have an actual name (not just the JID)
-                            if (name && name !== contact.id && !name.includes('@')) {
-                                upsertContact.run(this.id, contact.id, name);
+                            if (name && name !== normalized && !name.includes('@')) {
+                                upsertContact.run(this.id, normalized, name);
                             }
                         }
                     }
@@ -190,11 +146,11 @@ export class WhatsAppInstance {
                     if (chats) {
                         for (const chat of chats) {
                             if (!isJidValid(chat.id)) continue;
+                            const normalized = normalizeJid(chat.id);
                             const ts = chat.conversationTimestamp || chat.lastMessageRecvTimestamp;
                             const isoTs = ts ? new Date(Number(ts) * 1000).toISOString() : null;
-                            // Use JID as fallback name in the chats table
-                            const name = getChatName(chat.id, chat.name);
-                            upsertChat.run(this.id, chat.id, name, chat.unreadCount || 0, isoTs);
+                            const name = getChatName(normalized, chat.name);
+                            upsertChat.run(this.id, normalized, name, chat.unreadCount || 0, isoTs);
                         }
                     }
 
@@ -203,15 +159,15 @@ export class WhatsAppInstance {
                         for (const msg of messages) {
                             const text = getMessageText(msg);
                             if (text && isJidValid(msg.key.remoteJid!)) {
-                                const jid = msg.key.remoteJid!;
+                                const jid = normalizeJid(msg.key.remoteJid!);
                                 const ts = msg.messageTimestamp ? new Date(Number(msg.messageTimestamp) * 1000).toISOString() : new Date().toISOString();
                                 upsertChat.run(this.id, jid, getChatName(jid, msg.pushName), 0, ts);
-                                insertMessage.run(this.id, jid, msg.key.participant || jid, msg.pushName || "Unknown", text, msg.key.fromMe ? 1 : 0, ts);
+                                insertMessage.run(this.id, jid, normalizeJid(msg.key.participant || jid), msg.pushName || "Unknown", text, msg.key.fromMe ? 1 : 0, ts);
                                 dbInstance.prepare(`UPDATE chats SET last_message_text = ?, last_message_timestamp = ? WHERE instance_id = ? AND jid = ? AND (last_message_timestamp IS NULL OR ? >= last_message_timestamp)`).run(text, ts, this.id, jid, ts);
                                 msgCount++;
                             }
                         }
-                        console.log(`TRACE [Instance ${this.id}]: Successfully linked ${msgCount} history messages.`);
+                        console.log(`TRACE [Instance ${this.id}]: Linked ${msgCount} history messages.`);
                     }
                 })();
                 this.io.emit('chat_update', { instanceId: this.id });
@@ -223,10 +179,10 @@ export class WhatsAppInstance {
                     for (const msg of m.messages) {
                         const text = getMessageText(msg);
                         if (text && isJidValid(msg.key.remoteJid!)) {
-                            const jid = msg.key.remoteJid!;
+                            const jid = normalizeJid(msg.key.remoteJid!);
                             const ts = msg.messageTimestamp ? new Date(Number(msg.messageTimestamp) * 1000).toISOString() : new Date().toISOString();
                             upsertChat.run(this.id, jid, getChatName(jid, msg.pushName), 0, ts);
-                            insertMessage.run(this.id, jid, msg.key.participant || jid, msg.pushName || "Unknown", text, msg.key.fromMe ? 1 : 0, ts);
+                            insertMessage.run(this.id, jid, normalizeJid(msg.key.participant || jid), msg.pushName || "Unknown", text, msg.key.fromMe ? 1 : 0, ts);
                             dbInstance.prepare(`UPDATE chats SET last_message_text = ?, last_message_timestamp = ? WHERE instance_id = ? AND jid = ? AND (last_message_timestamp IS NULL OR ? >= last_message_timestamp)`).run(text, ts, this.id, jid, ts);
                             
                             this.io.emit('new_message', { instanceId: this.id, jid, text });
@@ -236,16 +192,17 @@ export class WhatsAppInstance {
                 }
             });
 
-            // Extra fallback listeners for individual updates
+            // Extra fallback listeners
             const evAny = this.sock.ev as any;
             evAny.on('chats.upsert', (chats: any[]) => {
                 console.log(`TRACE [Instance ${this.id}]: chats.upsert (${chats.length} items)`);
                 dbInstance.transaction(() => {
                     for (const chat of chats) {
                         if (!isJidValid(chat.id)) continue;
+                        const jid = normalizeJid(chat.id);
                         const ts = chat.conversationTimestamp || chat.lastMessageRecvTimestamp;
                         const isoTs = ts ? new Date(Number(ts) * 1000).toISOString() : null;
-                        upsertChat.run(this.id, chat.id, chat.name || chat.id.split('@')[0], chat.unreadCount || 0, isoTs);
+                        upsertChat.run(this.id, jid, getChatName(jid, chat.name), chat.unreadCount || 0, isoTs);
                     }
                 })();
                 this.io.emit('chat_update', { instanceId: this.id });
@@ -256,8 +213,9 @@ export class WhatsAppInstance {
                 dbInstance.transaction(() => {
                     for (const contact of contacts) {
                         if (isJidValid(contact.id)) {
+                            const jid = normalizeJid(contact.id);
                             const name = contact.name || contact.notify;
-                            if (name) upsertContact.run(this.id, contact.id, name);
+                            if (name) upsertContact.run(this.id, jid, name);
                         }
                     }
                 })();
@@ -265,7 +223,6 @@ export class WhatsAppInstance {
             });
 
             console.log(`TRACE [Instance ${this.id}]: init() successfully completed.`);
-        }
         } catch (err) {
             console.error(`TRACE [Instance ${this.id}]: FATAL ERROR during init:`, err);
         }
