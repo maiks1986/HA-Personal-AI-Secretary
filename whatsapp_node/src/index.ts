@@ -198,12 +198,11 @@ async function bootstrap() {
         const chats = db.prepare(`
             SELECT 
                 c.jid, 
-                COALESCE(co.name, c.name, c.jid) as name, 
+                c.name, 
                 c.unread_count, 
                 c.last_message_text, 
                 c.last_message_timestamp
             FROM chats c
-            LEFT JOIN contacts co ON c.jid = co.jid AND c.instance_id = co.instance_id
             WHERE c.instance_id = ? 
               AND (c.last_message_text IS NOT NULL OR c.unread_count > 0)
               AND c.jid NOT LIKE '%@broadcast'
@@ -211,6 +210,34 @@ async function bootstrap() {
         `).all(instanceId);
         console.log(`API: Returning ${chats.length} active chats`);
         res.json(chats);
+    });
+
+    app.get('/api/contacts/:instanceId', requireAuth, (req, res) => {
+        const { instanceId } = req.params;
+        const user = (req as any).haUser;
+        
+        const instanceData = db.prepare('SELECT ha_user_id FROM instances WHERE id = ?').get(instanceId) as any;
+        if (!user.isAdmin && instanceData?.ha_user_id !== user.id) return res.status(403).json({ error: "Access Denied" });
+
+        const contacts = db.prepare('SELECT * FROM contacts WHERE instance_id = ? ORDER BY name ASC').all(instanceId);
+        res.json(contacts);
+    });
+
+    app.post('/api/instances/:id/reconnect', requireAuth, async (req, res) => {
+        const { id } = req.params;
+        const instance = engineManager.getInstance(parseInt(id));
+        if (!instance) return res.status(404).json({ error: "Not found" });
+        await instance.reconnect();
+        res.json({ success: true });
+    });
+
+    app.post('/api/instances/:id/presence', requireAuth, async (req, res) => {
+        const { id } = req.params;
+        const { presence } = req.body;
+        const instance = engineManager.getInstance(parseInt(id));
+        if (!instance) return res.status(404).json({ error: "Not found" });
+        await instance.setPresence(presence);
+        res.json({ success: true });
     });
 
     app.get('/api/debug/stats', requireAuth, (req, res) => {
@@ -356,6 +383,7 @@ async function bootstrap() {
                 const status = allInstances.map(i => ({
                     id: i.id,
                     status: i.status,
+                    presence: i.presence,
                     qr: i.qr ? 'YES' : 'NO'
                 }));
                 const currentStatusJson = JSON.stringify(status);
@@ -366,6 +394,7 @@ async function bootstrap() {
                 socket.emit('instances_status', allInstances.map(i => ({
                     id: i.id,
                     status: i.status,
+                    presence: i.presence,
                     qr: i.qr
                 })));
             }

@@ -3,6 +3,7 @@ export interface Instance {
     name: string;
     ha_user_id?: string | null;
     status: string;
+    presence?: 'available' | 'unavailable';
     qr?: string | null;
     last_seen?: string | null;
 }
