@@ -9,6 +9,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { initDatabase, getDb } from './db/database';
 import { engineManager } from './manager/EngineManager';
 import { aiService } from './services/AiService';
+import { AddonConfig, AuthUser, Instance, Chat, Message } from './types';
 
 process.on('uncaughtException', (err) => {
     console.error('CRITICAL: Uncaught Exception:', err);
@@ -204,10 +205,9 @@ async function bootstrap() {
                 c.last_message_timestamp
             FROM chats c
             WHERE c.instance_id = ? 
-              AND (c.last_message_text IS NOT NULL OR c.unread_count > 0)
               AND c.jid NOT LIKE '%@broadcast'
             ORDER BY c.last_message_timestamp DESC
-        `).all(instanceId);
+        `).all(instanceId) as Chat[];
         console.log(`API: Returning ${chats.length} active chats`);
         res.json(chats);
     });

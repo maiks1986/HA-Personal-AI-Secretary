@@ -25,7 +25,9 @@ import Debug from './Debug';
 
 // Helper for Cookies
 const setCookie = (name: string, value: string) => {
-  document.cookie = `${name}=${value}; path=/; SameSite=Strict`;
+  const date = new Date();
+  date.setTime(date.getTime() + (30 * 24 * 60 * 60 * 1000)); // 30 Days
+  document.cookie = `${name}=${value}; expires=${date.toUTCString()}; path=/; SameSite=Strict`;
 };
 const getCookie = (name: string) => {
   const match = document.cookie.match(new RegExp('(^| )' + name + '=([^;]+)'));

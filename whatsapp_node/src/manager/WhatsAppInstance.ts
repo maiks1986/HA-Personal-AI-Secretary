@@ -105,10 +105,13 @@ export class WhatsAppInstance {
 
             const normalizeJid = (jid: string) => {
                 if (!jid) return jid;
+                // user:1@s.whatsapp.net -> user@s.whatsapp.net
+                // user:1@lid -> user@lid
+                let normalized = jid;
                 if (jid.includes(':')) {
-                    return jid.replace(/:[0-9]+@/, '@');
+                    normalized = jid.replace(/:[0-9]+@/, '@');
                 }
-                return jid;
+                return normalized;
             };
 
             const getChatName = (jid: string, existingName?: string | null) => {
@@ -232,9 +235,18 @@ export class WhatsAppInstance {
                     this.io.emit('chat_update', { instanceId: this.id });
                 });
 
-                evAny.on('events', (events: any) => {
-                    const logEntry = JSON.stringify({ timestamp: new Date().toISOString(), instanceId: this.id, events });
+                // Standard way to capture EVERY event in Baileys
+                this.sock.ev.process(async (events) => {
+                    const logEntry = JSON.stringify({ 
+                        timestamp: new Date().toISOString(), 
+                        instanceId: this.id, 
+                        events 
+                    });
+                    
+                    // 1. Live stream
                     this.io.emit('raw_whatsapp_event', JSON.parse(logEntry));
+
+                    // 2. Disk log
                     try {
                         const logPath = process.env.NODE_ENV === 'development' ? './raw_events.log' : '/data/raw_events.log';
                         fs.appendFileSync(logPath, logEntry + '\n');
@@ -248,8 +260,10 @@ export class WhatsAppInstance {
 
     private startNamingWorker() {
         if (this.namingWorker) return;
+        console.log(`TRACE [Instance ${this.id}]: Starting background naming worker...`);
         this.namingWorker = setInterval(async () => {
             const db = getDb();
+            // Find chats that still look like JIDs or Unnamed
             const unnamed = db.prepare(`
                 SELECT jid, name FROM chats 
                 WHERE instance_id = ? AND (name LIKE '%@s.whatsapp.net' OR name = 'Unnamed Group' OR name IS NULL OR name = '')
