@@ -108,43 +108,53 @@ export class WhatsAppInstance {
                     console.log(`TRACE [Instance ${this.id}]: Event -> connection.update`, JSON.stringify(update));
                 });
 
-                this.sock.ev.on('connection.update', async (update: Partial<ConnectionState>) => {
-                    const { connection, lastDisconnect, qr } = update;
-                    if (qr) {
-                        this.qr = await qrcode.toDataURL(qr);
-                        this.status = 'qr_ready';
+            // Direct listeners for maximum reliability
+            this.sock.ev.on('connection.update', async (update: Partial<ConnectionState>) => {
+                const { connection, lastDisconnect, qr } = update;
+                console.log(`TRACE [Instance ${this.id}]: connection.update ->`, connection || 'poll');
+                
+                if (qr) {
+                    this.qr = await qrcode.toDataURL(qr);
+                    this.status = 'qr_ready';
+                }
+                if (connection === 'open') {
+                    console.log(`TRACE [Instance ${this.id}]: Connection OPEN. Starting discovery...`);
+                    this.status = 'connected';
+                    this.qr = null;
+                    dbInstance.prepare('UPDATE instances SET status = ? WHERE id = ?').run('connected', this.id);
+                    
+                    const row = dbInstance.prepare('SELECT COUNT(*) as count FROM chats WHERE instance_id = ?').get(this.id) as any;
+                    const isEmpty = row?.count === 0;
+                    this.startSyncWatchdog(isEmpty);
+                }
+                if (connection === 'close') {
+                    const statusCode = (lastDisconnect?.error as Boom)?.output?.statusCode;
+                    console.log(`TRACE [Instance ${this.id}]: Connection CLOSED (Status: ${statusCode})`);
+                    this.status = 'disconnected';
+                    this.sock = null;
+                    this.stopSyncWatchdog();
+                    dbInstance.prepare('UPDATE instances SET status = ? WHERE id = ?').run('disconnected', this.id);
+                    if (statusCode === DisconnectReason.loggedOut) {
+                        console.log(`TRACE [Instance ${this.id}]: Logged out. Wiping session...`);
+                        await this.deleteAuth();
+                        await this.init();
+                    } else {
+                        if (this.isReconnecting) return;
+                        this.isReconnecting = true;
+                        setTimeout(async () => { this.isReconnecting = false; await this.init(); }, 5000);
                     }
-                    if (connection === 'open') {
-                        console.log(`TRACE [Instance ${this.id}]: Connection OPEN`);
-                        this.status = 'connected';
-                        this.qr = null;
-                        dbInstance.prepare('UPDATE instances SET status = ? WHERE id = ?').run('connected', this.id);
-                        
-                        const row = dbInstance.prepare('SELECT COUNT(*) as count FROM chats WHERE instance_id = ?').get(this.id) as any;
-                        const isEmpty = row?.count === 0;
-                        if (isEmpty) console.log(`TRACE [Instance ${this.id}]: DB Empty. Triggering fast sync watchdog.`);
-                        this.startSyncWatchdog(isEmpty);
-                    }
-                    if (connection === 'close') {
-                        const statusCode = (lastDisconnect?.error as Boom)?.output?.statusCode;
-                        console.log(`TRACE [Instance ${this.id}]: Connection CLOSED (Status: ${statusCode})`);
-                        this.status = 'disconnected';
-                        this.sock = null;
-                        this.stopSyncWatchdog();
-                        dbInstance.prepare('UPDATE instances SET status = ? WHERE id = ?').run('disconnected', this.id);
-                        if (statusCode === DisconnectReason.loggedOut) {
-                            console.log(`TRACE [Instance ${this.id}]: Logged out. Wiping session...`);
-                            await this.deleteAuth();
-                            await this.init();
-                        } else {
-                            if (this.isReconnecting) return;
-                            this.isReconnecting = true;
-                            setTimeout(async () => { this.isReconnecting = false; await this.init(); }, 5000);
-                        }
-                    }
-                });
+                }
+            });
 
-                this.sock.ev.on('creds.update', () => {
+            // Heartbeat: Log EVERY event emitted by the socket
+            (this.sock.ev as any).on('events', (events: any) => {
+                const names = Object.keys(events);
+                if (names.length > 0) {
+                    console.log(`TRACE [Instance ${this.id}]: Heartbeat -> [${names.join(', ')}]`);
+                }
+            });
+
+            this.sock.ev.on('creds.update', () => {
                     console.log(`TRACE [Instance ${this.id}]: creds.update`);
                     saveCreds();
                 });
@@ -238,9 +248,10 @@ export class WhatsAppInstance {
                         }
     private startSyncWatchdog(immediate: boolean = false) {
         this.stopSyncWatchdog();
-        // Increased to 5 minutes to allow for large history syncs, but check faster if immediate is requested
         const timeout = immediate ? 10000 : 300000;
+        console.log(`TRACE [Instance ${this.id}]: Sync Watchdog scheduled in ${timeout/1000}s`);
         this.watchdogTimer = setTimeout(async () => {
+            console.log(`TRACE [Instance ${this.id}]: Sync Watchdog executing check...`);
             const dbInstance = getDb();
             const row = dbInstance.prepare('SELECT COUNT(*) as count FROM chats WHERE instance_id = ?').get(this.id) as any;
             const chatCount = row?.count || 0;
