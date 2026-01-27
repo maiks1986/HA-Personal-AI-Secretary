@@ -132,6 +132,7 @@ async function bootstrap() {
             LEFT JOIN contacts co ON c.jid = co.jid AND c.instance_id = co.instance_id
             WHERE c.instance_id = ? 
               AND (c.last_message_text IS NOT NULL OR c.unread_count > 0)
+              AND c.jid NOT LIKE '%@broadcast'
             ORDER BY c.last_message_timestamp DESC
         `).all(instanceId);
         console.log(`API: Returning ${chats.length} active chats`);

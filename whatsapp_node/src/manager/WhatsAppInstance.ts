@@ -83,13 +83,26 @@ export class WhatsAppInstance {
                 logger: logger as any
             });
 
+            const getMessageText = (m: any) => {
+                const msg = m.message;
+                if (!msg) return null;
+                return msg.conversation || 
+                       msg.extendedTextMessage?.text || 
+                       msg.imageMessage?.caption || 
+                       msg.videoMessage?.caption ||
+                       msg.templateButtonReplyMessage?.selectedDisplayText ||
+                       msg.buttonsResponseMessage?.selectedDisplayText ||
+                       msg.listResponseMessage?.title ||
+                       null;
+            };
+
+            const isJidValid = (jid: string) => {
+                return jid && !jid.includes('@broadcast') && jid !== 'status@broadcast';
+            };
+
             if (this.sock) {
                 (this.sock as any).ev.process(async (events: any) => {
-                    const eventNames = Object.keys(events);
-                    if (this.debugEnabled && eventNames.length > 0) {
-                        console.log(`DEBUG [Instance ${this.id}]: Raw Events -> ${eventNames.join(', ')}`);
-                    }
-
+                    // ... (connection and creds logic)
                     if (events['connection.update']) {
                         const update = events['connection.update'];
                         const { connection, lastDisconnect, qr } = update;
@@ -130,37 +143,34 @@ export class WhatsAppInstance {
                         console.log(`TRACE [Instance ${this.id}]: History Set -> Chats: ${chats?.length || 0}, Contacts: ${contacts?.length || 0}, Messages: ${messages?.length || 0}`);
                         
                         db.transaction(() => {
-                            // 1. Process Contacts (just for identity)
                             if (contacts) {
                                 for (const contact of contacts) {
-                                    upsertContact.run(this.id, contact.id, contact.name || contact.notify || contact.id.split('@')[0]);
+                                    if (isJidValid(contact.id)) upsertContact.run(this.id, contact.id, contact.name || contact.notify || contact.id.split('@')[0]);
                                 }
                             }
 
-                            // 2. Process Chats (only those with activity)
                             if (chats) {
                                 for (const chat of chats) {
+                                    if (!isJidValid(chat.id)) continue;
                                     const ts = chat.conversationTimestamp || chat.lastMessageRecvTimestamp;
-                                    if (ts) {
-                                        const isoTs = new Date(Number(ts) * 1000).toISOString();
-                                        upsertChat.run(this.id, chat.id, chat.name || chat.id.split('@')[0], chat.unreadCount || 0, isoTs);
-                                    }
+                                    const isoTs = ts ? new Date(Number(ts) * 1000).toISOString() : null;
+                                    upsertChat.run(this.id, chat.id, chat.name || chat.id.split('@')[0], chat.unreadCount || 0, isoTs);
                                 }
                             }
 
-                            // 3. Process Historical Messages
                             if (messages) {
+                                let msgCount = 0;
                                 for (const msg of messages) {
-                                    const text = msg.message?.conversation || msg.message?.extendedTextMessage?.text || msg.message?.imageMessage?.caption || "";
-                                    if (text) {
+                                    const text = getMessageText(msg);
+                                    if (text && isJidValid(msg.key.remoteJid!)) {
                                         const jid = msg.key.remoteJid!;
                                         const ts = msg.messageTimestamp ? new Date(Number(msg.messageTimestamp) * 1000).toISOString() : new Date().toISOString();
-                                        
-                                        // Ensure chat entry exists because a message exists
                                         upsertChat.run(this.id, jid, msg.pushName || jid.split('@')[0], 0, ts);
                                         insertMessage.run(this.id, jid, msg.key.participant || jid, msg.pushName || "Unknown", text, msg.key.fromMe ? 1 : 0, ts);
+                                        msgCount++;
                                     }
                                 }
+                                console.log(`TRACE [Instance ${this.id}]: Imported ${msgCount} historical messages`);
                             }
                         })();
                     }
@@ -169,6 +179,7 @@ export class WhatsAppInstance {
                         const chats = (events as any)['chats.set'].chats;
                         if (chats) db.transaction(() => {
                             for (const chat of chats) {
+                                if (!isJidValid(chat.id)) continue;
                                 const ts = chat.conversationTimestamp || chat.lastMessageRecvTimestamp;
                                 if (ts) {
                                     const isoTs = new Date(Number(ts) * 1000).toISOString();
@@ -182,27 +193,10 @@ export class WhatsAppInstance {
                         const chats = events['chats.upsert'];
                         db.transaction(() => {
                             for (const chat of chats) {
+                                if (!isJidValid(chat.id)) continue;
                                 const ts = chat.conversationTimestamp || chat.lastMessageRecvTimestamp;
                                 const isoTs = ts ? new Date(Number(ts) * 1000).toISOString() : null;
                                 upsertChat.run(this.id, chat.id, chat.name || chat.id.split('@')[0], chat.unreadCount || 0, isoTs);
-                            }
-                        })();
-                    }
-
-                    if ((events as any)['contacts.set']) {
-                        const contacts = (events as any)['contacts.set'].contacts;
-                        if (contacts) db.transaction(() => {
-                            for (const contact of contacts) {
-                                upsertContact.run(this.id, contact.id, contact.name || contact.notify || contact.id.split('@')[0]);
-                            }
-                        })();
-                    }
-
-                    if (events['contacts.upsert']) {
-                        const contacts = events['contacts.upsert'];
-                        db.transaction(() => {
-                            for (const contact of contacts) {
-                                upsertContact.run(this.id, contact.id, contact.name || contact.notify || contact.id.split('@')[0]);
                             }
                         })();
                     }
@@ -211,19 +205,13 @@ export class WhatsAppInstance {
                         const m = events['messages.upsert'];
                         if (m.type === 'notify') {
                             for (const msg of m.messages) {
-                                const text = msg.message?.conversation || msg.message?.extendedTextMessage?.text || msg.message?.imageMessage?.caption || "";
-                                if (text) {
+                                const text = getMessageText(msg);
+                                if (text && isJidValid(msg.key.remoteJid!)) {
                                     const jid = msg.key.remoteJid!;
                                     const ts = msg.messageTimestamp ? new Date(Number(msg.messageTimestamp) * 1000).toISOString() : new Date().toISOString();
-                                    
-                                    // Ensure chat exists
                                     upsertChat.run(this.id, jid, msg.pushName || jid.split('@')[0], 0, ts);
                                     insertMessage.run(this.id, jid, msg.key.participant || jid, msg.pushName || "Unknown", text, msg.key.fromMe ? 1 : 0, ts);
-
-                                    db.prepare(`
-                                        UPDATE chats SET last_message_text = ?, last_message_timestamp = ?
-                                        WHERE instance_id = ? AND jid = ?
-                                    `).run(text, ts, this.id, jid);
+                                    db.prepare(`UPDATE chats SET last_message_text = ?, last_message_timestamp = ? WHERE instance_id = ? AND jid = ?`).run(text, ts, this.id, jid);
                                 }
                             }
                         }
