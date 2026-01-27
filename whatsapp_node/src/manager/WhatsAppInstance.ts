@@ -142,14 +142,22 @@ export class WhatsAppInstance {
                         const { chats, contacts, messages } = events['messaging-history.set'];
                         console.log(`TRACE [Instance ${this.id}]: History Set -> Chats: ${chats?.length || 0}, Contacts: ${contacts?.length || 0}, Messages: ${messages?.length || 0}`);
                         
-                        db.transaction(() => {
-                            if (contacts) {
-                                for (const contact of contacts) {
-                                    if (isJidValid(contact.id)) upsertContact.run(this.id, contact.id, contact.name || contact.notify || contact.id.split('@')[0]);
-                                }
-                            }
-
-                            if (chats) {
+                                                db.transaction(() => {
+                                                    // 1. Process Contacts (just for identity)
+                                                    if (contacts) {
+                                                        for (const contact of contacts) {
+                                                            if (isJidValid(contact.id)) {
+                                                                const name = contact.name || contact.notify;
+                                                                if (name) {
+                                                                    upsertContact.run(this.id, contact.id, name);
+                                                                } else {
+                                                                    // Only insert number if it doesn't exist yet
+                                                                    db.prepare('INSERT OR IGNORE INTO contacts (instance_id, jid, name) VALUES (?, ?, ?)').run(this.id, contact.id, contact.id.split('@')[0]);
+                                                                }
+                                                            }
+                                                        }
+                                                    }
+                                                    if (chats) {
                                 for (const chat of chats) {
                                     if (!isJidValid(chat.id)) continue;
                                     const ts = chat.conversationTimestamp || chat.lastMessageRecvTimestamp;

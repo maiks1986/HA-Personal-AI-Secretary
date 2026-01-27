@@ -9,6 +9,14 @@ import db, { initDatabase } from './db/database';
 import { engineManager } from './manager/EngineManager';
 import { aiService } from './services/AiService';
 
+process.on('uncaughtException', (err) => {
+    console.error('CRITICAL: Uncaught Exception:', err);
+});
+
+process.on('unhandledRejection', (reason, promise) => {
+    console.error('CRITICAL: Unhandled Rejection at:', promise, 'reason:', reason);
+});
+
 const app = express();
 const server = http.createServer(app);
 const io = new SocketServer(server, { cors: { origin: "*" } });
