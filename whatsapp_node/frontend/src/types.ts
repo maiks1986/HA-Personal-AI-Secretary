@@ -21,8 +21,8 @@ export interface Chat {
     unread_count: number;
     last_message_text?: string | null;
     last_message_timestamp?: string | null;
-    is_archived?: number;
-    is_pinned?: number;
+    is_archived: number;
+    is_pinned: number;
 }
 
 export interface Message {
@@ -43,6 +43,17 @@ export interface Message {
     is_from_me: number;
     parent_message_id?: string | null;
     reactions?: Array<{ sender_jid: string, emoji: string }>;
+}
+
+export interface StatusUpdate {
+    id: number;
+    instance_id: number;
+    sender_jid: string;
+    sender_name: string;
+    type: string;
+    text: string;
+    media_path?: string | null;
+    timestamp: string;
 }
 
 export interface AuthStatusResponse {

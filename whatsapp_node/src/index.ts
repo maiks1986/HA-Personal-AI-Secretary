@@ -212,11 +212,13 @@ async function bootstrap() {
                 c.name, 
                 c.unread_count, 
                 c.last_message_text, 
-                c.last_message_timestamp
+                c.last_message_timestamp,
+                c.is_archived,
+                c.is_pinned
             FROM chats c
             WHERE c.instance_id = ? 
               AND c.jid NOT LIKE '%@broadcast'
-            ORDER BY c.last_message_timestamp DESC
+            ORDER BY c.is_pinned DESC, c.last_message_timestamp DESC
         `).all(instanceId) as Chat[];
         console.log(`API: Returning ${chats.length} active chats`);
         res.json(chats);
