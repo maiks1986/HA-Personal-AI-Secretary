@@ -143,6 +143,8 @@ const App = () => {
   const [isAiLoading, setIsAiLoading] = useState(false);
   const [isReseting, setIsReseting] = useState(false);
   const [showDebug, setShowDebug] = useState(false);
+  const [presenceMap, setPresenceMap] = useState<Record<string, string>>({});
+  const [searchQuery, setSearchQuery] = useState('');
   
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
@@ -199,12 +201,27 @@ const App = () => {
         else fetchContacts(data.instanceId);
       }
     });
-    socket.on('new_message', (data: { instanceId: number, jid: string }) => {
-      if (selectedInstance?.id === data.instanceId && selectedChat?.jid === data.jid) {
-        fetchMessages(data.instanceId, data.jid);
-      }
-    });
-    return () => { socket.off('instances_status'); socket.off('chat_update'); socket.off('new_message'); };
+        socket.on('new_message', (data: { instanceId: number, jid: string }) => {
+          if (selectedInstance?.id === data.instanceId && selectedChat?.jid === data.jid) {
+            fetchMessages(data.instanceId, data.jid);
+          }
+        });
+    
+        socket.on('presence_update', (data: { instanceId: number, jid: string, presence: any }) => {
+          if (selectedInstance?.id === data.instanceId) {
+            const status = data.presence[Object.keys(data.presence)[0]]?.lastKnownPresence || '';
+            setPresenceMap(prev => ({ ...prev, [data.jid]: status }));
+            // Auto-clear presence after 5s
+            if (status) setTimeout(() => setPresenceMap(prev => ({ ...prev, [data.jid]: '' })), 5000);
+          }
+        });
+    
+        return () => { 
+          socket.off('instances_status');
+          socket.off('chat_update');
+          socket.off('new_message');
+          socket.off('presence_update');
+        };
   }, [authState, selectedInstance?.id, selectedChat?.jid, activeTab]);
 
   useEffect(() => {
@@ -309,6 +326,13 @@ const App = () => {
     } catch (e) { alert("Failed to send"); }
   };
 
+  const handleSearch = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedInstance || !searchQuery) return;
+    const res = await axios.get<Message[]>(`/api/messages/${selectedInstance.id}/search?query=${searchQuery}`);
+    setMessages(res.data);
+  };
+
   if (authState === 'loading') return <div className="h-screen w-full flex items-center justify-center bg-whatsapp-bg"><RefreshCw size={48} className="text-teal-600 spin" /></div>;
 
   if (authState === 'unauthenticated') {
@@ -367,7 +391,14 @@ const App = () => {
           </div>
           <div className="relative">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
-            <input placeholder={`Search ${activeTab}...`} className="w-full bg-slate-100 rounded-xl py-2 pl-10 pr-4 text-xs font-medium outline-none focus:ring-2 ring-teal-500/10" />
+            <form onSubmit={handleSearch}>
+              <input 
+                placeholder={`Search ${activeTab}...`} 
+                value={searchQuery}
+                onChange={e => setSearchQuery(e.target.value)}
+                className="w-full bg-slate-100 rounded-xl py-2 pl-10 pr-4 text-xs font-medium outline-none focus:ring-2 ring-teal-500/10" 
+              />
+            </form>
           </div>
         </header>
         <div className="flex-1 overflow-y-auto">
@@ -398,7 +429,14 @@ const App = () => {
             <header className="p-4 bg-slate-50 border-b flex justify-between items-center shadow-sm z-10">
               <div className="flex items-center gap-3">
                 <div className="w-10 h-10 bg-slate-300 rounded-full flex items-center justify-center shadow-inner text-slate-500"><CircleDot size={24} /></div>
-                <div><h3 className="font-bold leading-tight text-slate-800">{selectedChat.name}</h3>{intent && <span className="text-[10px] bg-teal-100 text-teal-700 px-2 py-0.5 rounded-full font-bold uppercase">Intent: {intent}</span>}</div>
+                <div>
+                  <h3 className="font-bold leading-tight text-slate-800">{selectedChat.name}</h3>
+                  {presenceMap[selectedChat.jid] ? (
+                    <span className="text-[10px] text-teal-600 font-bold animate-pulse uppercase tracking-widest">{presenceMap[selectedChat.jid]}...</span>
+                  ) : (
+                    intent && <span className="text-[10px] bg-teal-100 text-teal-700 px-2 py-0.5 rounded-full font-bold uppercase">Intent: {intent}</span>
+                  )}
+                </div>
               </div>
               <div className="flex items-center gap-4 text-slate-400"><Search size={20} className="cursor-pointer" /><MoreVertical size={20} className="cursor-pointer" /></div>
             </header>
