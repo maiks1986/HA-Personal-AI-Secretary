@@ -54,6 +54,7 @@ export function initDatabase() {
             unread_count INTEGER DEFAULT 0,
             last_message_text TEXT,
             last_message_timestamp DATETIME,
+            is_fully_synced INTEGER DEFAULT 0,
             PRIMARY KEY(instance_id, jid),
             FOREIGN KEY(instance_id) REFERENCES instances(id)
         );
