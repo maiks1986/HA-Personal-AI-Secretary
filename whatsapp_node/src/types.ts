@@ -21,6 +21,8 @@ export interface Chat {
     unread_count: number;
     last_message_text?: string | null;
     last_message_timestamp?: string | null;
+    is_archived?: number;
+    is_pinned?: number;
 }
 
 export interface Message {
@@ -31,8 +33,11 @@ export interface Message {
     sender_jid: string;
     sender_name: string;
     text: string;
-    type: 'text' | 'image' | 'video' | 'audio' | 'document' | 'sticker' | 'location' | 'poll' | 'reaction';
+    type: 'text' | 'image' | 'video' | 'audio' | 'document' | 'sticker' | 'location' | 'poll' | 'reaction' | 'vcard';
     media_path?: string | null;
+    latitude?: number | null;
+    longitude?: number | null;
+    vcard_data?: string | null;
     status: 'sent' | 'delivered' | 'read' | 'failed' | 'deleted';
     timestamp: string;
     is_from_me: number;

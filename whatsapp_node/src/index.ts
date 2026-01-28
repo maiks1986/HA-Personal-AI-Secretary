@@ -280,6 +280,36 @@ async function bootstrap() {
         res.json({ success: true });
     });
 
+    // --- PHASE 3 UTILITY ENDPOINTS ---
+    app.get('/api/messages/:instanceId/search', requireAuth, (req, res) => {
+        const { instanceId } = req.params;
+        const { query, type } = req.query;
+        let sql = 'SELECT * FROM messages WHERE instance_id = ?';
+        const params: any[] = [instanceId];
+
+        if (query) {
+            sql += ' AND text LIKE ?';
+            params.push(`%${query}%`);
+        }
+        if (type) {
+            sql += ' AND type = ?';
+            params.push(type);
+        }
+        sql += ' ORDER BY timestamp DESC LIMIT 100';
+
+        const results = db.prepare(sql).all(...params);
+        res.json(results);
+    });
+
+    app.post('/api/chats/:instanceId/:jid/modify', requireAuth, async (req, res) => {
+        const { instanceId, jid } = req.params;
+        const { action } = req.body; // archive, pin, delete
+        const inst = engineManager.getInstance(parseInt(instanceId));
+        if (!inst) return res.status(404).json({ error: "Not found" });
+        await inst.modifyChat(jid, action);
+        res.json({ success: true });
+    });
+
     app.get('/api/debug/stats', requireAuth, (req, res) => {
         const stats = {
             users: db.prepare('SELECT COUNT(*) as count FROM users').get(),

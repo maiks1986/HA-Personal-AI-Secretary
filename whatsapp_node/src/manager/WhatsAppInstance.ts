@@ -8,7 +8,8 @@ import makeWASocket, {
     Contact,
     downloadMediaMessage,
     WAMessage,
-    GroupParticipant
+    GroupParticipant,
+    AnyMessageContent
 } from '@whiskeysockets/baileys';
 import { Boom } from '@hapi/boom';
 import qrcode from 'qrcode';
@@ -84,7 +85,11 @@ export class WhatsAppInstance {
                 let text = message.conversation || message.extendedTextMessage?.text || "";
                 let type: any = 'text';
                 let media_path = null;
+                let latitude = null;
+                let longitude = null;
+                let vcard_data = null;
 
+                // 1. Handle Media
                 const mediaType = Object.keys(message)[0];
                 if (['imageMessage', 'videoMessage', 'audioMessage', 'documentMessage', 'stickerMessage'].includes(mediaType)) {
                     type = mediaType.replace('Message', '');
@@ -99,6 +104,23 @@ export class WhatsAppInstance {
                     } catch (e) {}
                 }
 
+                // 2. Handle Location
+                if (message.locationMessage || message.liveLocationMessage) {
+                    type = 'location';
+                    const loc = message.locationMessage || message.liveLocationMessage;
+                    latitude = loc?.degreesLatitude;
+                    longitude = loc?.degreesLongitude;
+                    text = `Location: ${latitude}, ${longitude}`;
+                }
+
+                // 3. Handle vCards
+                if (message.contactMessage || message.contactsArrayMessage) {
+                    type = 'vcard';
+                    vcard_data = message.contactMessage ? message.contactMessage.vcard : JSON.stringify(message.contactsArrayMessage?.contacts?.map(c => c.vcard) || []);
+                    text = "Shared Contact Card";
+                }
+
+                // 4. Handle Edits
                 if (message.protocolMessage?.type === 14) {
                     const editedId = message.protocolMessage.key?.id;
                     const newText = message.protocolMessage.editedMessage?.conversation || message.protocolMessage.editedMessage?.extendedTextMessage?.text;
@@ -106,6 +128,7 @@ export class WhatsAppInstance {
                     return;
                 }
 
+                // 5. Handle Reactions
                 if (message.reactionMessage) {
                     const targetId = message.reactionMessage.key?.id;
                     const emoji = message.reactionMessage.text;
@@ -118,10 +141,10 @@ export class WhatsAppInstance {
 
                 dbInstance.prepare(`
                     INSERT INTO messages 
-                    (instance_id, whatsapp_id, chat_jid, sender_jid, sender_name, text, type, media_path, status, timestamp, is_from_me) 
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    (instance_id, whatsapp_id, chat_jid, sender_jid, sender_name, text, type, media_path, latitude, longitude, vcard_data, status, timestamp, is_from_me) 
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     ON CONFLICT(whatsapp_id) DO UPDATE SET text = excluded.text, status = excluded.status
-                `).run(instanceId, whatsapp_id, jid, sender_jid, sender_name, text, type, media_path, 'sent', timestamp, is_from_me);
+                `).run(instanceId, whatsapp_id, jid, sender_jid, sender_name, text, type, media_path, latitude, longitude, vcard_data, 'sent', timestamp, is_from_me);
 
                 dbInstance.prepare(`
                     INSERT INTO chats (instance_id, jid, name, unread_count, last_message_timestamp) 
@@ -181,11 +204,9 @@ export class WhatsAppInstance {
         const sender_jid = m.key.participant || m.key.remoteJid!;
         const sender_name = m.pushName || "Unknown";
         const timestamp = new Date(Number(m.messageTimestamp) * 1000).toISOString();
-        
         let text = message?.conversation || message?.extendedTextMessage?.text || "";
         let type = 'text';
         let media_path = null;
-
         const mediaType = message ? Object.keys(message)[0] : '';
         if (['imageMessage', 'videoMessage'].includes(mediaType)) {
             type = mediaType.replace('Message', '');
@@ -198,12 +219,7 @@ export class WhatsAppInstance {
                 fs.writeFileSync(media_path, buffer);
             } catch (e) {}
         }
-
-        getDb().prepare(`
-            INSERT INTO status_updates (instance_id, sender_jid, sender_name, type, text, media_path, timestamp)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
-        `).run(instanceId, sender_jid, sender_name, type, text, media_path, timestamp);
-        
+        getDb().prepare(`INSERT INTO status_updates (instance_id, sender_jid, sender_name, type, text, media_path, timestamp) VALUES (?, ?, ?, ?, ?, ?, ?)`).run(instanceId, sender_jid, sender_name, type, text, media_path, timestamp);
         this.io.emit('status_update', { instanceId });
     }
 
@@ -221,6 +237,28 @@ export class WhatsAppInstance {
         if (!this.sock) throw new Error("Socket not initialized");
         if (update.subject) await this.sock.groupUpdateSubject(jid, update.subject);
         if (update.description) await this.sock.groupUpdateDescription(jid, update.description);
+    }
+
+    async modifyChat(jid: string, action: 'archive' | 'pin' | 'mute' | 'delete') {
+        if (!this.sock) throw new Error("Socket not initialized");
+        const db = getDb();
+        
+        // Find last message for metadata
+        const lastMsg = db.prepare('SELECT whatsapp_id, timestamp FROM messages WHERE instance_id = ? AND chat_jid = ? ORDER BY timestamp DESC LIMIT 1').get(this.id, jid) as any;
+        const lastMessages = lastMsg ? [{ key: { id: lastMsg.whatsapp_id, remoteJid: jid, fromMe: true }, messageTimestamp: Math.floor(new Date(lastMsg.timestamp).getTime()/1000) }] : [];
+
+        if (action === 'archive') {
+            await this.sock.chatModify({ archive: true, lastMessages: lastMessages as any }, jid);
+            db.prepare('UPDATE chats SET is_archived = 1 WHERE instance_id = ? AND jid = ?').run(this.id, jid);
+        } else if (action === 'pin') {
+            await this.sock.chatModify({ pin: true }, jid);
+            db.prepare('UPDATE chats SET is_pinned = 1 WHERE instance_id = ? AND jid = ?').run(this.id, jid);
+        } else if (action === 'delete') {
+            await this.sock.chatModify({ delete: true, lastMessages: lastMessages as any }, jid);
+            db.prepare('DELETE FROM messages WHERE instance_id = ? AND chat_jid = ?').run(this.id, jid);
+            db.prepare('DELETE FROM chats WHERE instance_id = ? AND jid = ?').run(this.id, jid);
+        }
+        this.io.emit('chat_update', { instanceId: this.id });
     }
 
     private startNamingWorker() {

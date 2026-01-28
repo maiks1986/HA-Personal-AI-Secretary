@@ -55,6 +55,8 @@ export function initDatabase() {
             last_message_text TEXT,
             last_message_timestamp DATETIME,
             is_fully_synced INTEGER DEFAULT 0,
+            is_archived INTEGER DEFAULT 0,
+            is_pinned INTEGER DEFAULT 0,
             PRIMARY KEY(instance_id, jid),
             FOREIGN KEY(instance_id) REFERENCES instances(id)
         );
@@ -69,6 +71,9 @@ export function initDatabase() {
             text TEXT,
             type TEXT DEFAULT 'text',
             media_path TEXT,
+            latitude REAL,
+            longitude REAL,
+            vcard_data TEXT,
             status TEXT DEFAULT 'sent',
             timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
             is_from_me INTEGER,
