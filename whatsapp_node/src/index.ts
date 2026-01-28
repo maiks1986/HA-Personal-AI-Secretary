@@ -41,6 +41,9 @@ app.use(express.json());
 const PUBLIC_PATH = path.join(__dirname, 'public');
 app.use(express.static(PUBLIC_PATH));
 
+const MEDIA_PATH = process.env.NODE_ENV === 'development' ? path.join(__dirname, '../../media') : '/data/media';
+app.use('/media', express.static(MEDIA_PATH));
+
 const PORT = 5002;
 const OPTIONS_PATH = '/data/options.json';
 
@@ -371,12 +374,18 @@ async function bootstrap() {
 
     app.get('/api/messages/:instanceId/:jid', requireAuth, (req, res) => {
         const { instanceId, jid } = req.params;
-        const user = (req as any).haUser;
+        const user = (req as any).haUser as AuthUser;
         console.log(`API: Fetching messages for instance ${instanceId}, chat ${jid}`);
-        const instanceData = db.prepare('SELECT ha_user_id FROM instances WHERE id = ?').get(instanceId) as any;
+        const instanceData = db.prepare('SELECT ha_user_id FROM instances WHERE id = ?').get(instanceId) as Instance | undefined;
         if (!user.isAdmin && instanceData?.ha_user_id !== user.id) return res.status(403).json({ error: "Access Denied" });
 
-        const messages = db.prepare('SELECT * FROM messages WHERE instance_id = ? AND chat_jid = ? ORDER BY id ASC').all(instanceId, jid);
+        const messages = db.prepare('SELECT * FROM messages WHERE instance_id = ? AND chat_jid = ? ORDER BY timestamp ASC').all(instanceId, jid) as any[];
+        
+        // Attach reactions to each message
+        for (const msg of messages) {
+            msg.reactions = db.prepare('SELECT sender_jid, emoji FROM reactions WHERE instance_id = ? AND message_whatsapp_id = ?').all(instanceId, msg.whatsapp_id);
+        }
+
         res.json(messages);
     });
 
