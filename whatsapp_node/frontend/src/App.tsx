@@ -25,6 +25,14 @@ import {
 } from 'lucide-react';
 
 import Debug from './Debug';
+import { 
+  Instance, 
+  Chat, 
+  Contact, 
+  Message, 
+  AuthStatusResponse, 
+  LoginResponse 
+} from './types';
 
 // Helper for Cookies
 const setCookie = (name: string, value: string) => {
@@ -46,41 +54,6 @@ const updateAxiosAuth = (token: string | null) => {
 };
 
 const socket = io();
-
-// --- TYPES ---
-interface Instance {
-  id: number;
-  name: string;
-  status: string;
-  presence?: 'available' | 'unavailable';
-  qr?: string | null;
-}
-
-interface Chat {
-  jid: string;
-  name: string;
-  unread_count: number;
-  last_message_text: string;
-  last_message_timestamp: string;
-}
-
-interface Contact {
-  jid: string;
-  name: string;
-}
-
-interface Message {
-  id: number;
-  whatsapp_id: string;
-  sender_name: string;
-  text: string;
-  type: 'text' | 'image' | 'video' | 'audio' | 'document' | 'sticker' | 'location' | 'poll' | 'reaction' | 'vcard';
-  media_path?: string | null;
-  status: 'sent' | 'delivered' | 'read' | 'failed';
-  timestamp: string;
-  is_from_me: number;
-  reactions?: Array<{ sender_jid: string, emoji: string }>;
-}
 
 const MessageBubble = ({ m }: { m: Message }) => {
   const isMe = m.is_from_me === 1;
@@ -179,7 +152,7 @@ const App = () => {
     const localToken = getCookie('direct_token') || localStorage.getItem('direct_token');
     updateAxiosAuth(localToken);
     try {
-      const res = await axios.get('/api/auth/status');
+      const res = await axios.get<AuthStatusResponse>('/api/auth/status');
       if (res.data.authenticated) {
         setAuthState('authenticated');
         fetchInstances();
@@ -200,9 +173,9 @@ const App = () => {
     try {
       let res;
       if (loginMode === 'direct') {
-        res = await axios.post('/api/auth/login', { password });
+        res = await axios.post<LoginResponse>('/api/auth/login', { password });
       } else {
-        res = await axios.post('/api/auth/ha_login', { haUrl, haToken });
+        res = await axios.post<LoginResponse>('/api/auth/ha_login', { haUrl, haToken });
       }
       setCookie('direct_token', res.data.token);
       updateAxiosAuth(res.data.token);
@@ -247,7 +220,7 @@ const App = () => {
   }, [selectedChat?.jid]);
 
   const fetchContacts = async (instanceId: number) => {
-    const res = await axios.get(`/api/contacts/${instanceId}`);
+    const res = await axios.get<Contact[]>(`/api/contacts/${instanceId}`);
     setContacts(res.data);
   };
 
@@ -263,18 +236,18 @@ const App = () => {
   };
 
   const fetchInstances = async () => {
-    const res = await axios.get('/api/instances');
+    const res = await axios.get<Instance[]>('/api/instances');
     setInstances(res.data);
     if (res.data.length > 0 && !selectedInstance) setSelectedInstance(res.data[0]);
   };
 
   const fetchChats = async (instanceId: number) => {
-    const res = await axios.get(`/api/chats/${instanceId}`);
+    const res = await axios.get<Chat[]>(`/api/chats/${instanceId}`);
     setChats(res.data);
   };
 
   const fetchGeminiKey = async () => {
-    const res = await axios.get('/api/settings/gemini_api_key');
+    const res = await axios.get<{ value: string }>('/api/settings/gemini_api_key');
     setGeminiKey(res.data.value);
   };
 
@@ -290,7 +263,7 @@ const App = () => {
   };
 
   const fetchMessages = async (instanceId: number, jid: string) => {
-    const res = await axios.get(`/api/messages/${instanceId}/${jid}`);
+    const res = await axios.get<Message[]>(`/api/messages/${instanceId}/${jid}`);
     setMessages(res.data);
     scrollToBottom();
     if (res.data.length > 0) analyzeIntent(res.data);
