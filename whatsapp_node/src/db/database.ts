@@ -1,66 +1,49 @@
 import Database from 'better-sqlite3';
 import path from 'path';
+import fs from 'fs';
 
-// Use /data for Home Assistant Add-on persistence
-const DB_PATH = process.env.NODE_ENV === 'development' 
-    ? path.join(__dirname, '../../whatsapp.db')
-    : '/data/whatsapp.db';
-
-let db: Database.Database | null = null;
-
-export function getDb(): Database.Database {
-    if (!db) {
-        console.log('TRACE [Database]: Opening connection to', DB_PATH);
-        db = new Database(DB_PATH, { timeout: 10000 }); 
-        db.pragma('journal_mode = WAL'); 
-    }
-    return db;
-}
+let db: Database.Database;
 
 export function initDatabase() {
-    console.log('TRACE [Database]: Initializing tables...');
-    const database = getDb();
-    
-    database.exec(`
-        CREATE TABLE IF NOT EXISTS users (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            username TEXT UNIQUE NOT NULL,
-            password TEXT NOT NULL,
-            role TEXT DEFAULT 'user'
-        );
+    const dbPath = process.env.NODE_ENV === 'development' 
+        ? path.join(__dirname, '../../whatsapp.db')
+        : '/data/whatsapp.db';
 
+    const dir = path.dirname(dbPath);
+    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+
+    db = new Database(dbPath);
+    db.pragma('journal_mode = WAL');
+
+    // 1. Core Tables
+    db.prepare(`
         CREATE TABLE IF NOT EXISTS instances (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             name TEXT NOT NULL,
-            owner_id INTEGER,
             ha_user_id TEXT,
             status TEXT DEFAULT 'disconnected',
-            last_seen DATETIME,
-            FOREIGN KEY(owner_id) REFERENCES users(id)
-        );
+            presence TEXT DEFAULT 'available',
+            qr TEXT,
+            last_seen DATETIME
+        )
+    `).run();
 
-        CREATE TABLE IF NOT EXISTS contacts (
-            instance_id INTEGER,
-            jid TEXT,
-            name TEXT,
-            PRIMARY KEY(instance_id, jid),
-            FOREIGN KEY(instance_id) REFERENCES instances(id)
-        );
-
+    db.prepare(`
         CREATE TABLE IF NOT EXISTS chats (
             instance_id INTEGER,
-            jid TEXT,
+            jid TEXT NOT NULL,
             name TEXT,
             unread_count INTEGER DEFAULT 0,
             last_message_text TEXT,
             last_message_timestamp DATETIME,
-            is_fully_synced INTEGER DEFAULT 0,
             is_archived INTEGER DEFAULT 0,
             is_pinned INTEGER DEFAULT 0,
-            PRIMARY KEY(instance_id, jid),
-            FOREIGN KEY(instance_id) REFERENCES instances(id)
-        );
+            is_fully_synced INTEGER DEFAULT 0,
+            PRIMARY KEY (instance_id, jid)
+        )
+    `).run();
 
+    db.prepare(`
         CREATE TABLE IF NOT EXISTS messages (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             instance_id INTEGER,
@@ -75,28 +58,22 @@ export function initDatabase() {
             longitude REAL,
             vcard_data TEXT,
             status TEXT DEFAULT 'sent',
-            timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
-            is_from_me INTEGER,
-            parent_message_id TEXT,
-            FOREIGN KEY(instance_id) REFERENCES instances(id)
-        );
+            timestamp DATETIME,
+            is_from_me INTEGER DEFAULT 0,
+            parent_message_id TEXT
+        )
+    `).run();
 
-        CREATE TABLE IF NOT EXISTS reactions (
+    db.prepare(`
+        CREATE TABLE IF NOT EXISTS contacts (
             instance_id INTEGER,
-            message_whatsapp_id TEXT,
-            sender_jid TEXT,
-            emoji TEXT,
-            timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
-            PRIMARY KEY(instance_id, message_whatsapp_id, sender_jid),
-            FOREIGN KEY(instance_id) REFERENCES instances(id),
-            FOREIGN KEY(message_whatsapp_id) REFERENCES messages(whatsapp_id)
-        );
+            jid TEXT NOT NULL,
+            name TEXT,
+            PRIMARY KEY (instance_id, jid)
+        )
+    `).run();
 
-        CREATE TABLE IF NOT EXISTS settings (
-            key TEXT PRIMARY KEY,
-            value TEXT NOT NULL
-        );
-
+    db.prepare(`
         CREATE TABLE IF NOT EXISTS status_updates (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             instance_id INTEGER,
@@ -105,18 +82,59 @@ export function initDatabase() {
             type TEXT,
             text TEXT,
             media_path TEXT,
-            timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
-            FOREIGN KEY(instance_id) REFERENCES instances(id)
-        );
-    `);
+            timestamp DATETIME
+        )
+    `).run();
 
-    console.log('Database initialized successfully at', DB_PATH);
+    db.prepare(`
+        CREATE TABLE IF NOT EXISTS reactions (
+            instance_id INTEGER,
+            message_whatsapp_id TEXT,
+            sender_jid TEXT,
+            emoji TEXT,
+            PRIMARY KEY (instance_id, message_whatsapp_id, sender_jid)
+        )
+    `).run();
+
+    db.prepare(`
+        CREATE TABLE IF NOT EXISTS settings (
+            key TEXT PRIMARY KEY,
+            value TEXT
+        )
+    `).run();
+
+    // 2. MIGRATIONS (Ensure columns exist for legacy databases)
+    const tables = ['chats', 'messages', 'instances'];
+    
+    // Helper to add column if it doesn't exist
+    const ensureColumn = (table: string, column: string, definition: string) => {
+        const info = db.prepare(`PRAGMA table_info(${table})`).all() as any[];
+        if (!info.find(c => c.name === column)) {
+            console.log(`MIGRATION: Adding column '${column}' to table '${table}'`);
+            db.prepare(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`).run();
+        }
+    };
+
+    // Chat Migrations
+    ensureColumn('chats', 'is_archived', 'INTEGER DEFAULT 0');
+    ensureColumn('chats', 'is_pinned', 'INTEGER DEFAULT 0');
+    ensureColumn('chats', 'is_fully_synced', 'INTEGER DEFAULT 0');
+
+    // Message Migrations
+    ensureColumn('messages', 'whatsapp_id', 'TEXT UNIQUE');
+    ensureColumn('messages', 'type', "TEXT DEFAULT 'text'");
+    ensureColumn('messages', 'media_path', 'TEXT');
+    ensureColumn('messages', 'latitude', 'REAL');
+    ensureColumn('messages', 'longitude', 'REAL');
+    ensureColumn('messages', 'vcard_data', 'TEXT');
+    ensureColumn('messages', 'parent_message_id', 'TEXT');
+
+    // Instance Migrations
+    ensureColumn('instances', 'presence', "TEXT DEFAULT 'available'");
+
+    console.log('DATABASE: Initialization and Migrations complete.');
 }
 
-export function closeDatabase() {
-    if (db) {
-        db.close();
-        db = null;
-        console.log('Database connection closed.');
-    }
+export function getDb() {
+    return db;
 }
