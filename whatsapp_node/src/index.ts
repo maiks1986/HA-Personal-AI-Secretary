@@ -289,10 +289,14 @@ async function bootstrap() {
     // --- PHASE 3 UTILITY ENDPOINTS ---
     app.get('/api/messages/:instanceId/search', requireAuth, (req, res) => {
         const { instanceId } = req.params;
-        const { query, type } = req.query;
+        const { query, type, jid } = req.query;
         let sql = 'SELECT * FROM messages WHERE instance_id = ?';
         const params: any[] = [instanceId];
 
+        if (jid) {
+            sql += ' AND chat_jid = ?';
+            params.push(normalizeJid(jid as string));
+        }
         if (query) {
             sql += ' AND text LIKE ?';
             params.push(`%${query}%`);
@@ -309,10 +313,11 @@ async function bootstrap() {
 
     app.post('/api/chats/:instanceId/:jid/modify', requireAuth, async (req, res) => {
         const { instanceId, jid } = req.params;
-        const { action } = req.body; // archive, pin, delete
+        const normalized = normalizeJid(jid);
+        const { action } = req.body; 
         const inst = engineManager.getInstance(parseInt(instanceId));
         if (!inst) return res.status(404).json({ error: "Not found" });
-        await inst.modifyChat(jid, action);
+        await inst.modifyChat(normalized, action);
         res.json({ success: true });
     });
 
