@@ -121,7 +121,9 @@ export function initDatabase() {
     ensureColumn('chats', 'is_fully_synced', 'INTEGER DEFAULT 0');
 
     // Message Migrations
-    ensureColumn('messages', 'whatsapp_id', 'TEXT UNIQUE');
+    ensureColumn('messages', 'whatsapp_id', 'TEXT');
+    db.prepare('CREATE UNIQUE INDEX IF NOT EXISTS idx_messages_whatsapp_id ON messages(whatsapp_id)').run();
+    
     ensureColumn('messages', 'type', "TEXT DEFAULT 'text'");
     ensureColumn('messages', 'media_path', 'TEXT');
     ensureColumn('messages', 'latitude', 'REAL');
