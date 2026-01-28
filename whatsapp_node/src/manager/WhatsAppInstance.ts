@@ -97,7 +97,7 @@ export class WhatsAppInstance {
                     try {
                         const buffer = await downloadMediaMessage(m, 'buffer', {}, { logger: this.logger, reuploadRequest: this.sock!.updateMediaMessage });
                         const fileName = `${whatsapp_id}.${type === 'audio' ? 'ogg' : type === 'image' ? 'jpg' : type === 'video' ? 'mp4' : 'bin'}`;
-                        const dir = process.env.NODE_ENV === 'development' ? './media' : '/data/media';
+                        const dir = process.env.NODE_ENV === 'development' ? path.join(__dirname, '../media') : '/data/media';
                         if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
                         media_path = path.join(dir, fileName);
                         fs.writeFileSync(media_path, buffer);
@@ -213,7 +213,7 @@ export class WhatsAppInstance {
             try {
                 const buffer = await downloadMediaMessage(m, 'buffer', {}, { logger: this.logger, reuploadRequest: this.sock!.updateMediaMessage });
                 const fileName = `status_${m.key.id}.${type === 'image' ? 'jpg' : 'mp4'}`;
-                const dir = process.env.NODE_ENV === 'development' ? './media' : '/data/media';
+                const dir = process.env.NODE_ENV === 'development' ? path.join(__dirname, '../media') : '/data/media';
                 if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
                 media_path = path.join(dir, fileName);
                 fs.writeFileSync(media_path, buffer);

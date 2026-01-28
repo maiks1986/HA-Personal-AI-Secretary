@@ -41,7 +41,7 @@ app.use(express.json());
 const PUBLIC_PATH = path.join(__dirname, 'public');
 app.use(express.static(PUBLIC_PATH));
 
-const MEDIA_PATH = process.env.NODE_ENV === 'development' ? path.join(__dirname, '../../media') : '/data/media';
+const MEDIA_PATH = process.env.NODE_ENV === 'development' ? path.join(__dirname, '../media') : '/data/media';
 app.use('/media', express.static(MEDIA_PATH));
 
 const PORT = 5002;
