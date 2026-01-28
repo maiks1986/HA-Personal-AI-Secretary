@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import { RefreshCw } from 'lucide-react';
 import { useAuth } from './hooks/useAuth';
@@ -33,6 +33,16 @@ const App = () => {
   const [newInstanceName, setNewInstanceName] = useState('');
   const [isReseting, setIsReseting] = useState(false);
 
+  // 1. HOOKS MUST BE AT THE TOP
+  useEffect(() => {
+    if (auth.authState === 'authenticated') {
+      api.getSetting('gemini_api_key').then(res => wa.setGeminiKey(res.data.value));
+      api.getSetting('auto_nudge_enabled').then(res => wa.setAutoNudge(res.data.value !== 'false'));
+      api.getSetting('sync_delay_ms').then(res => res.data.value && wa.setSyncDelay(parseInt(res.data.value)));
+    }
+  }, [auth.authState]);
+
+  // 2. EARLY RETURNS AFTER HOOKS
   if (auth.authState === 'loading') return <div className="h-screen w-full flex items-center justify-center bg-whatsapp-bg"><RefreshCw size={48} className="text-teal-600 spin" /></div>;
   if (auth.authState === 'unauthenticated') return <Login {...auth} />;
 
@@ -86,14 +96,6 @@ const App = () => {
     await api.saveSetting('sync_delay_ms', wa.syncDelay.toString());
     setIsSettingsOpen(false);
   };
-
-  React.useEffect(() => {
-    if (auth.authState === 'authenticated') {
-      api.getSetting('gemini_api_key').then(res => wa.setGeminiKey(res.data.value));
-      api.getSetting('auto_nudge_enabled').then(res => wa.setAutoNudge(res.data.value !== 'false'));
-      api.getSetting('sync_delay_ms').then(res => res.data.value && wa.setSyncDelay(parseInt(res.data.value)));
-    }
-  }, [auth.authState]);
 
   return (
     <div className="flex h-screen bg-whatsapp-bg overflow-hidden text-slate-800">
