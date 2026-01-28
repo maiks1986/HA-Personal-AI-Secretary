@@ -7,6 +7,9 @@ import fs from 'fs';
 import { initDatabase } from './db/database';
 import { engineManager } from './manager/EngineManager';
 
+// Auth Middleware
+import { identityResolver } from './api/authMiddleware';
+
 // Routes
 import { authRouter } from './api/routes/auth';
 import { instancesRouter } from './api/routes/instances';
@@ -55,6 +58,9 @@ async function bootstrap() {
     
     const debugEnabled = config.debug_logging === true || config.debug_logging === 'true';
     await engineManager.init(io, debugEnabled);
+
+    // Global Identity Resolver
+    app.use(identityResolver);
 
     // Mount Routes
     app.use('/api/auth', authRouter(getAddonConfig));

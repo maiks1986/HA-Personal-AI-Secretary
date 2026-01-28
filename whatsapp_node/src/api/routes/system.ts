@@ -4,7 +4,7 @@ import path from 'path';
 import { getDb } from '../../db/database';
 import { engineManager } from '../../manager/EngineManager';
 import { aiService } from '../../services/AiService';
-import { requireAuth } from './auth';
+import { requireAuth } from '../authMiddleware';
 
 export const systemRouter = () => {
     const router = Router();

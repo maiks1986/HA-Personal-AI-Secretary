@@ -8,30 +8,6 @@ export const sessions = new Map<string, { id: string, isAdmin: boolean }>();
 export const authRouter = (getAddonConfig: () => any) => {
     const router = Router();
 
-    // Middleware to resolve user identity
-    router.use((req, res, next) => {
-        const userId = req.headers['x-hass-user-id'] as string;
-        const isAdmin = req.headers['x-hass-is-admin'] === '1' || req.headers['x-hass-is-admin'] === 'true';
-        
-        if (userId) {
-            (req as any).haUser = { id: userId, isAdmin, source: 'ingress' } as AuthUser;
-            return next();
-        }
-
-        const cookieToken = req.headers.cookie?.split('; ').find(row => row.startsWith('direct_token='))?.split('=')[1];
-        const authHeader = req.headers['authorization'];
-        const token = cookieToken || authHeader?.split(' ')[1];
-
-        if (token && sessions.has(token)) {
-            const session = sessions.get(token);
-            (req as any).haUser = { id: session!.id, isAdmin: session!.isAdmin, source: 'direct' } as AuthUser;
-            return next();
-        }
-
-        (req as any).haUser = null;
-        next();
-    });
-
     router.get('/status', (req, res) => {
         const user = (req as any).haUser as AuthUser | null;
         res.json({ 
@@ -71,9 +47,4 @@ export const authRouter = (getAddonConfig: () => any) => {
     });
 
     return router;
-};
-
-export const requireAuth = (req: any, res: any, next: any) => {
-    if (!req.haUser) return res.status(401).json({ error: "Unauthorized" });
-    next();
 };

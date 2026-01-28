@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { getDb } from '../../db/database';
 import { engineManager } from '../../manager/EngineManager';
-import { requireAuth } from './auth';
+import { requireAuth } from '../authMiddleware';
 
 export const instancesRouter = () => {
     const router = Router();

@@ -2,7 +2,7 @@ import { Router } from 'express';
 import { getDb } from '../../db/database';
 import { engineManager } from '../../manager/EngineManager';
 import { normalizeJid } from '../../utils';
-import { requireAuth } from './auth';
+import { requireAuth } from '../authMiddleware';
 import { Chat, AuthUser, Instance } from '../../types';
 
 export const messagingRouter = () => {
