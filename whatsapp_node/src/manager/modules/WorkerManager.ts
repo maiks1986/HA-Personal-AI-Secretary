@@ -48,7 +48,9 @@ export class WorkerManager {
             }
 
             const db = getDb();
-            // Priority: 1. Pinned, 2. Unread, 3. Most Recent
+            const delaySetting = db.prepare('SELECT value FROM settings WHERE key = ?').get('sync_delay_ms') as any;
+            let nextDelay = delaySetting?.value ? parseInt(delaySetting.value) : 2000; 
+
             const chat = db.prepare(`
                 SELECT jid FROM chats 
                 WHERE instance_id = ? AND is_fully_synced = 0 
@@ -60,8 +62,6 @@ export class WorkerManager {
                 this.historyWorker = null;
                 return;
             }
-            
-            let nextDelay = 2000; // 2s default delay between chunks if successful
 
             try {
                 const oldest = db.prepare('SELECT whatsapp_id, timestamp, is_from_me FROM messages WHERE instance_id = ? AND chat_jid = ? ORDER BY timestamp ASC LIMIT 1').get(this.instanceId, chat.jid) as any;
@@ -70,10 +70,9 @@ export class WorkerManager {
 
                 const result = await this.sock.fetchMessageHistory(100, oldestKey as any, oldestTs);
                 
-                // If no more history for this chat, mark as fully synced
-                if (!result || result === 0 || result === '') {
+                if (!result || (typeof result === 'string' && result === '')) {
                     db.prepare('UPDATE chats SET is_fully_synced = 1 WHERE instance_id = ? AND jid = ?').run(this.instanceId, chat.jid);
-                    nextDelay = 500; // Fast-track to next chat
+                    nextDelay = 500; 
                 }
             } catch (e) {
                 console.error(`[Sync Worker ${this.instanceId}]: Timeout or Error, backing off...`, e);

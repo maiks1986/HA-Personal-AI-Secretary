@@ -80,6 +80,21 @@ const App = () => {
     setShowStatusViewer(true);
   };
 
+  const handleSaveSettings = async () => {
+    await api.saveSetting('gemini_api_key', wa.geminiKey);
+    await api.saveSetting('auto_nudge_enabled', wa.autoNudge.toString());
+    await api.saveSetting('sync_delay_ms', wa.syncDelay.toString());
+    setIsSettingsOpen(false);
+  };
+
+  React.useEffect(() => {
+    if (auth.authState === 'authenticated') {
+      api.getSetting('gemini_api_key').then(res => wa.setGeminiKey(res.data.value));
+      api.getSetting('auto_nudge_enabled').then(res => wa.setAutoNudge(res.data.value !== 'false'));
+      api.getSetting('sync_delay_ms').then(res => res.data.value && wa.setSyncDelay(parseInt(res.data.value)));
+    }
+  }, [auth.authState]);
+
   return (
     <div className="flex h-screen bg-whatsapp-bg overflow-hidden text-slate-800">
       <AccountStrip 
@@ -147,7 +162,9 @@ const App = () => {
           setGeminiKey={wa.setGeminiKey}
           autoNudge={wa.autoNudge}
           setAutoNudge={wa.setAutoNudge}
-          onSave={() => api.saveSetting('gemini_api_key', wa.geminiKey).then(() => setIsSettingsOpen(false))}
+          syncDelay={wa.syncDelay}
+          setSyncDelay={wa.setSyncDelay}
+          onSave={handleSaveSettings}
           onReset={() => api.resetSystem().then(() => window.location.reload())}
         />
       )}

@@ -7,6 +7,8 @@ interface SettingsModalProps {
   setGeminiKey: (k: string) => void;
   autoNudge: boolean;
   setAutoNudge: (n: boolean) => void;
+  syncDelay: number;
+  setSyncDelay: (d: number) => void;
   onSave: () => void;
   onReset: () => void;
 }
@@ -17,6 +19,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   setGeminiKey, 
   autoNudge, 
   setAutoNudge, 
+  syncDelay,
+  setSyncDelay,
   onSave, 
   onReset 
 }) => {
@@ -41,6 +45,23 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
               placeholder="Paste key..." 
               className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl outline-none focus:border-teal-500 focus:bg-white transition-all text-sm font-mono shadow-inner" 
             />
+          </div>
+
+          <div>
+            <div className="flex justify-between items-center mb-2">
+              <label className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] ml-1">Sync Performance Delay</label>
+              <span className="text-[10px] font-black text-teal-600 bg-teal-50 px-2 py-0.5 rounded-full">{(syncDelay / 1000).toFixed(1)}s</span>
+            </div>
+            <input 
+              type="range" 
+              min="1000" 
+              max="30000" 
+              step="500" 
+              value={syncDelay} 
+              onChange={(e) => setSyncDelay(parseInt(e.target.value))}
+              className="w-full h-2 bg-slate-100 rounded-lg appearance-none cursor-pointer accent-teal-600"
+            />
+            <p className="text-[8px] text-slate-400 font-bold mt-2 italic text-center">Lower is faster, higher is safer against WhatsApp rate limits.</p>
           </div>
           
           <div className="flex items-center justify-between p-4 bg-slate-50 rounded-2xl border-2 border-slate-100">

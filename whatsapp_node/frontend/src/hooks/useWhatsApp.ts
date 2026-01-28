@@ -16,6 +16,7 @@ export const useWhatsApp = (authState: string) => {
   const [intent, setIntent] = useState<string | null>(null);
   const [statuses, setStatuses] = useState<StatusUpdate[]>([]);
   const [autoNudge, setAutoNudge] = useState(true);
+  const [syncDelay, setSyncDelay] = useState(2000);
   const [geminiKey, setGeminiKey] = useState('');
   
   // Group specific state
@@ -115,6 +116,8 @@ export const useWhatsApp = (authState: string) => {
     setStatuses,
     autoNudge,
     setAutoNudge,
+    syncDelay,
+    setSyncDelay,
     geminiKey,
     setGeminiKey,
     newGroupTitle,
