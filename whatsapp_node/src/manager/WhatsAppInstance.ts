@@ -29,6 +29,7 @@ export class WhatsAppInstance {
     private authPath: string;
     private namingWorker: NodeJS.Timeout | null = null;
     private historyWorker: NodeJS.Timeout | null = null;
+    private nudgeTimer: NodeJS.Timeout | null = null;
     private isReconnecting: boolean = false;
     private debugEnabled: boolean;
     private io: any;
@@ -188,6 +189,7 @@ export class WhatsAppInstance {
                         dbInstance.prepare('UPDATE instances SET status = ? WHERE id = ?').run('connected', this.id);
                         this.startNamingWorker();
                         this.startDeepHistoryWorker();
+                        this.startAutoNudgeWorker();
                     }
                 });
 
@@ -319,6 +321,21 @@ export class WhatsAppInstance {
         }, 30000);
     }
 
+    private startAutoNudgeWorker() {
+        if (this.nudgeTimer) clearInterval(this.nudgeTimer);
+        this.nudgeTimer = setInterval(async () => {
+            const db = getDb();
+            const setting = db.prepare('SELECT value FROM settings WHERE key = ?').get('auto_nudge_enabled') as any;
+            if (setting?.value === 'false') return;
+
+            const chatCount = db.prepare('SELECT COUNT(*) as count FROM chats WHERE instance_id = ?').get(this.id) as any;
+            if (chatCount?.count === 0 && this.status === 'connected') {
+                console.log(`[Instance ${this.id}]: Auto-Nudge triggered. Stalled sync detected.`);
+                this.reconnect();
+            }
+        }, 600000); // 10 minutes
+    }
+
     async setPresence(presence: 'available' | 'unavailable') {
         this.presence = presence;
         if (this.sock) await this.sock.sendPresenceUpdate(presence);
@@ -340,6 +357,7 @@ export class WhatsAppInstance {
     async deleteAuth() {
         if (this.namingWorker) clearInterval(this.namingWorker);
         if (this.historyWorker) clearInterval(this.historyWorker);
+        if (this.nudgeTimer) clearInterval(this.nudgeTimer);
         if (this.sock) { try { await this.sock.logout(); } catch (e) {} this.sock = null; }
         if (fs.existsSync(this.authPath)) fs.rmSync(this.authPath, { recursive: true, force: true });
     }
@@ -347,6 +365,7 @@ export class WhatsAppInstance {
     async close() {
         if (this.namingWorker) clearInterval(this.namingWorker);
         if (this.historyWorker) clearInterval(this.historyWorker);
+        if (this.nudgeTimer) clearInterval(this.nudgeTimer);
         if (this.sock) { this.sock.end(undefined); this.sock = null; }
     }
 }

@@ -105,6 +105,7 @@ const App = () => {
   const [isAddingInstance, setIsAddingInstance] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [geminiKey, setGeminiKey] = useState('');
+  const [autoNudge, setAutoNudge] = useState(true);
   const [newInstanceName, setNewInstanceName] = useState('');
   const [isAiLoading, setIsAiLoading] = useState(false);
   const [isReseting, setIsReseting] = useState(false);
@@ -210,8 +211,18 @@ const App = () => {
   const handleTogglePresence = async () => { if (selectedInstance) await axios.post(`/api/instances/${selectedInstance.id}/presence`, { presence: selectedInstance.presence === 'available' ? 'unavailable' : 'available' }); };
   const fetchInstances = async () => { const res = await axios.get<Instance[]>('/api/instances'); setInstances(res.data); if (res.data.length > 0 && !selectedInstance) setSelectedInstance(res.data[0]); };
   const fetchChats = async (instanceId: number) => { const res = await axios.get<Chat[]>(`/api/chats/${instanceId}`); setChats(res.data); };
-  const fetchGeminiKey = async () => { const res = await axios.get<{ value: string }>('/api/settings/gemini_api_key'); setGeminiKey(res.data.value); };
-  const handleSaveSettings = async () => { await axios.post('/api/settings', { key: 'gemini_api_key', value: geminiKey }); setIsSettingsOpen(false); };
+    const fetchGeminiKey = async () => {
+      const res = await axios.get<{ value: string }>('/api/settings/gemini_api_key');
+      setGeminiKey(res.data.value);
+      const nudgeRes = await axios.get<{ value: string }>('/api/settings/auto_nudge_enabled');
+      setAutoNudge(nudgeRes.data.value !== 'false');
+    };
+  
+    const handleSaveSettings = async () => {
+      await axios.post('/api/settings', { key: 'gemini_api_key', value: geminiKey });
+      await axios.post('/api/settings', { key: 'auto_nudge_enabled', value: autoNudge.toString() });
+      setIsSettingsOpen(false);
+    };
   const handleSystemReset = async () => { if (confirm("CRITICAL Wipe?")) { await axios.post('api/system/reset'); window.location.reload(); } };
   const fetchMessages = async (instanceId: number, jid: string) => { const res = await axios.get<Message[]>(`/api/messages/${instanceId}/${jid}`); setMessages(res.data.sort((a,b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime())); scrollToBottom(); if (res.data.length > 0) analyzeIntent(res.data); };
   const analyzeIntent = async (msgs: Message[]) => { try { const res = await axios.post('/api/ai/analyze', { messages: msgs.slice(-20) }); setIntent(res.data.intent); } catch (e) {} };
@@ -360,7 +371,26 @@ const App = () => {
 
       {showStatusViewer && <div className="fixed inset-0 bg-slate-900 flex items-center justify-center z-[250] animate-in fade-in duration-300"><div className="max-w-2xl w-full h-[80vh] flex flex-col"><div className="flex justify-between items-center p-6"><h3 className="text-white font-black text-2xl uppercase tracking-tighter">Status Updates</h3><button onClick={() => setShowStatusViewer(false)} className="text-slate-400 hover:text-white transition-all"><X size={32} /></button></div><div className="flex-1 overflow-y-auto p-6 space-y-6">{statuses.length === 0 ? <p className="text-slate-500 text-center italic mt-20">No status updates found.</p> : statuses.map(s => <div key={s.id} className="bg-slate-800 rounded-2xl overflow-hidden border border-slate-700 shadow-xl"><div className="p-4 border-b border-slate-700 flex justify-between items-center"><span className="text-teal-400 font-black text-xs uppercase">{s.sender_name}</span><span className="text-slate-500 text-[10px]">{new Date(s.timestamp).toLocaleString()}</span></div>{s.media_path && <div className="aspect-video bg-black flex items-center justify-center">{s.type === 'image' ? <img src={`/media/${s.media_path.split(/[\/]/).pop()}`} className="max-h-full max-w-full object-contain" alt="status" /> : <video src={`/media/${s.media_path.split(/[\/]/).pop()}`} controls className="max-h-full max-w-full" />}</div>}<div className="p-4 text-white text-sm leading-relaxed">{s.text}</div></div>)}</div></div></div>}
 
-      {isSettingsOpen && <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-[100] backdrop-blur-md animate-in fade-in duration-200"><div className="bg-white p-10 rounded-[2.5rem] shadow-2xl w-[450px] border border-slate-100 animate-in zoom-in-95 duration-300"><div className="flex justify-between items-center mb-8"><h3 className="font-black text-2xl flex items-center gap-3 text-slate-800 uppercase tracking-tighter"><Settings className="text-teal-600" /> System Config</h3><button onClick={() => setIsSettingsOpen(false)} className="bg-slate-50 p-2 rounded-xl text-slate-400 hover:text-red-500 transition-all"><X size={24} /></button></div><div className="space-y-6"><div><label className="block text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mb-3 ml-1">Gemini AI Key</label><input type="password" value={geminiKey} onChange={(e) => setGeminiKey(e.target.value)} placeholder="Paste key..." className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl outline-none focus:border-teal-500 focus:bg-white transition-all text-sm font-mono shadow-inner" /></div><button onClick={handleSaveSettings} className="w-full bg-teal-600 text-white p-5 rounded-2xl font-black uppercase tracking-widest hover:bg-teal-700 shadow-xl transition-all active:scale-[0.98] mt-4">Sync Configuration</button><div className="pt-6 border-t border-slate-100 mt-6"><button onClick={handleSystemReset} className="w-full bg-white text-red-500 border-2 border-red-100 p-4 rounded-2xl font-bold uppercase text-xs tracking-widest hover:bg-red-50 transition-all flex items-center justify-center gap-2"><AlertTriangle size={16} /> Full System Wipe</button></div></div></div></div>}
+      {isSettingsOpen && <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-[100] backdrop-blur-md animate-in fade-in duration-200"><div className="bg-white p-10 rounded-[2.5rem] shadow-2xl w-[450px] border border-slate-100 animate-in zoom-in-95 duration-300"><div className="flex justify-between items-center mb-8"><h3 className="font-black text-2xl flex items-center gap-3 text-slate-800 uppercase tracking-tighter"><Settings className="text-teal-600" /> System Config</h3><button onClick={() => setIsSettingsOpen(false)} className="bg-slate-50 p-2 rounded-xl text-slate-400 hover:text-red-500 transition-all"><X size={24} /></button></div><div className="space-y-6">
+  <div>
+    <label className="block text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mb-3 ml-1">Gemini AI Key</label>
+    <input type="password" value={geminiKey} onChange={(e) => setGeminiKey(e.target.value)} placeholder="Paste key..." className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl outline-none focus:border-teal-500 focus:bg-white transition-all text-sm font-mono shadow-inner" />
+  </div>
+  
+  <div className="flex items-center justify-between p-4 bg-slate-50 rounded-2xl border-2 border-slate-100">
+    <div>
+      <h4 className="text-xs font-black text-slate-700 uppercase">Auto-Nudge Health Check</h4>
+      <p className="text-[9px] text-slate-400 font-bold">Automatically restart stalled syncs</p>
+    </div>
+    <button 
+      onClick={() => setAutoNudge(!autoNudge)} 
+      className={`w-12 h-6 rounded-full transition-all relative ${autoNudge ? 'bg-teal-600' : 'bg-slate-300'}`}
+    >
+      <div className={`absolute top-1 w-4 h-4 bg-white rounded-full transition-all ${autoNudge ? 'left-7' : 'left-1'}`}></div>
+    </button>
+  </div>
+
+  <button onClick={handleSaveSettings} className="w-full bg-teal-600 text-white p-5 rounded-2xl font-black uppercase tracking-widest hover:bg-teal-700 shadow-xl transition-all active:scale-[0.98] mt-4">Sync Configuration</button><div className="pt-6 border-t border-slate-100 mt-6"><button onClick={handleSystemReset} className="w-full bg-white text-red-500 border-2 border-red-100 p-4 rounded-2xl font-bold uppercase text-xs tracking-widest hover:bg-red-50 transition-all flex items-center justify-center gap-2"><AlertTriangle size={16} /> Full System Wipe</button></div></div></div></div>}
 
       {isAddingInstance && <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-[100] backdrop-blur-md animate-in fade-in duration-200"><div className="bg-white p-10 rounded-[2.5rem] shadow-2xl w-96 border border-slate-100 animate-in zoom-in-95 duration-300"><div className="flex justify-between items-center mb-8"><h3 className="font-black text-2xl text-slate-800 uppercase tracking-tighter">Deploy Engine</h3><button onClick={() => setIsAddingInstance(false)} className="bg-slate-50 p-2 rounded-xl text-slate-400 hover:text-red-500 transition-all"><X size={24} /></button></div><div className="mb-8"><label className="block text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mb-3 ml-1">Identifier</label><input autoFocus value={newInstanceName} onChange={(e) => setNewInstanceName(e.target.value)} placeholder="e.g. CORE" className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl outline-none focus:border-teal-500 uppercase font-bold" /></div><button onClick={handleCreateInstance} className="w-full bg-teal-600 text-white p-5 rounded-2xl font-black uppercase tracking-widest active:scale-[0.98]">Initialize Node</button></div></div>}
 
