@@ -220,7 +220,14 @@ const App = () => {
   const handleCreateInstance = async () => { if (!newInstanceName) return; await axios.post('/api/instances', { name: newInstanceName }); setNewInstanceName(''); setIsAddingInstance(false); fetchInstances(); };
   const handleHardReset = async () => { if (!selectedInstance || !confirm("Delete session?")) return; setIsReseting(true); try { await axios.delete(`/api/instances/${selectedInstance.id}`); setSelectedInstance(null); fetchInstances(); } finally { setIsReseting(false); } };
   const handleSendMessage = async () => { if (!inputText || !selectedInstance || !selectedChat) return; try { await axios.post('/api/send_message', { instanceId: selectedInstance.id, contact: selectedChat.jid, message: inputText }); setInputText(''); setSteerText(''); } catch (e) { alert("Failed to send"); } };
-  const handleSearch = async (e: React.FormEvent) => { e.preventDefault(); if (!selectedInstance || !searchQuery) return; const res = await axios.get<Message[]>(`/api/messages/${selectedInstance.id}/search?query=${searchQuery}`); setMessages(res.data); };
+    const handleSearch = async (e: React.FormEvent) => {
+      e.preventDefault();
+      if (!selectedInstance || !searchQuery) return;
+      let url = `/api/messages/${selectedInstance.id}/search?query=${searchQuery}`;
+      if (selectedChat) url += `&jid=${selectedChat.jid}`;
+      const res = await axios.get<Message[]>(url);
+      setMessages(res.data);
+    };
 
   if (authState === 'loading') return <div className="h-screen w-full flex items-center justify-center bg-whatsapp-bg"><RefreshCw size={48} className="text-teal-600 spin" /></div>;
 
@@ -291,14 +298,19 @@ const App = () => {
                 <User size={24} className="text-slate-400" />
                 {chat.is_pinned === 1 && <Pin size={10} className="absolute -top-1 -right-1 text-teal-600 rotate-45" />}
               </div>
-              <div className="flex-1 overflow-hidden">
-                <div className="flex justify-between items-start mb-0.5">
-                  <span className="font-bold text-slate-800 truncate">{chat.name}</span>
-                  <span className="text-[9px] font-black text-slate-400 uppercase">{chat.last_message_timestamp ? new Date(chat.last_message_timestamp).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'}) : ''}</span>
-                </div>
-                <div className="text-xs text-slate-500 truncate italic">{chat.last_message_text || 'No messages yet'}</div>
-              </div>
-              {chat.unread_count > 0 && <div className="bg-teal-600 text-white text-[10px] font-black px-1.5 py-0.5 rounded-full min-w-[18px] text-center">{chat.unread_count}</div>}
+                              <div className="flex-1 overflow-hidden">
+                                <div className="flex justify-between items-start mb-0.5">
+                                  <span className="font-bold text-slate-800 truncate">{chat.name}</span>
+                                  <span className="text-[9px] font-black text-slate-400 uppercase">{chat.last_message_timestamp ? new Date(chat.last_message_timestamp).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'}) : ''}</span>
+                                </div>
+                                <div className="text-xs text-slate-500 truncate italic">
+                                  {presenceMap[chat.jid] ? (
+                                    <span className="text-teal-600 font-bold animate-pulse uppercase tracking-tighter">{presenceMap[chat.jid]}...</span>
+                                  ) : (
+                                    chat.last_message_text || 'No messages yet'
+                                  )}
+                                </div>
+                              </div>              {chat.unread_count > 0 && <div className="bg-teal-600 text-white text-[10px] font-black px-1.5 py-0.5 rounded-full min-w-[18px] text-center">{chat.unread_count}</div>}
             </div>
           )) : contacts.map(contact => (
             <div key={contact.jid} onClick={() => { setSelectedChat({ ...contact, unread_count: 0, last_message_text: '', last_message_timestamp: '', is_archived: 0, is_pinned: 0 }); setActiveTab('chats'); }} className="p-4 flex items-center gap-3 cursor-pointer border-b border-slate-50 hover:bg-slate-50 transition-all">
