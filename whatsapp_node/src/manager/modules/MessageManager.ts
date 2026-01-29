@@ -154,6 +154,20 @@ export class MessageManager {
             // IDENTITY RESOLUTION: The Chat identity should always be the contact name (1-on-1) or group subject.
             let chatIdentityName = this.resolveNameFromContacts(jid);
 
+            // SENDER NAME RESOLUTION:
+            // 1. Try `pushName` (The name they chose and sent with the message)
+            // 2. Try `contacts` table (Where we store `notify` name which is also their chosen name, or our manual name)
+            // 3. Fallback to "Unknown" (or maybe number?)
+            let senderName = m.pushName;
+            if (!senderName) {
+                const contactName = this.resolveNameFromContacts(sender_jid);
+                // resolveNameFromContacts returns number if no name found. We check if it's different.
+                if (contactName && contactName !== sender_jid.split('@')[0]) {
+                    senderName = contactName;
+                }
+            }
+            if (!senderName) senderName = "Unknown"; // Or consider using `sender_jid.split('@')[0]`
+
             if (jid === 'status@broadcast') {
                 await this.handleStatusUpdate(m);
                 return;
@@ -235,7 +249,7 @@ export class MessageManager {
                 (instance_id, whatsapp_id, chat_jid, sender_jid, sender_name, text, type, media_path, latitude, longitude, vcard_data, status, timestamp, is_from_me) 
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT(whatsapp_id) DO UPDATE SET text = excluded.text, status = excluded.status
-            `).run(this.instanceId, whatsapp_id, jid, sender_jid, m.pushName || "Unknown", text, type, media_path, latitude, longitude, vcard_data, 'sent', timestamp, is_from_me);
+            `).run(this.instanceId, whatsapp_id, jid, sender_jid, senderName, text, type, media_path, latitude, longitude, vcard_data, 'sent', timestamp, is_from_me);
 
             // Save/Update Chat with Identity Name (Ensures it doesn't change to "Me" or individual sender name)
             db.prepare(`

@@ -1,8 +1,8 @@
 {
-  "timestamp": "2026-01-30T01:00:00.000Z",
-  "description": "Bumped version to 1.9.1.0012. Updated AI Service to explicitly use 'gemini-1.5-flash' model to align with Google's free tier.",
+  "timestamp": "2026-01-30T01:30:00.000Z",
+  "description": "Bumped version to 1.9.1.0013. Improved sender name resolution: If pushName is missing, now falls back to the local contact list (notify name) before defaulting to 'Unknown'.",
   "modules_affected": [
-    "whatsapp_node/src/services/AiService.ts",
+    "whatsapp_node/src/manager/modules/MessageManager.ts",
     "whatsapp_node/config.yaml",
     "whatsapp_node/package.json",
     "whatsapp_node/src/last_fixes.json"
