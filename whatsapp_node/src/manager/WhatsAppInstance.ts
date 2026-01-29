@@ -39,6 +39,10 @@ export class WhatsAppInstance {
     private workerManager: WorkerManager | null = null;
     private chatManager: ChatManager | null = null;
     private qrManager: QRManager;
+    
+    // Health Monitor
+    private errorCount: number = 0;
+    private lastErrorTime: number = 0;
 
     constructor(id: number, name: string, io: any, debugEnabled: boolean = false) {
         this.id = id;
@@ -87,8 +91,29 @@ export class WhatsAppInstance {
                     fs.appendFileSync(this.logPath, JSON.stringify(eventData) + '\n');
                 } catch (e) { console.error('Failed to write to raw_events.log', e); }
                 
+                const jsonEvents = JSON.stringify(events);
+
+                // HEALTH MONITOR: Detect Session Corruption (Bad MAC / SessionError loop)
+                if (jsonEvents.includes('Bad MAC') || jsonEvents.includes('SessionError') || jsonEvents.includes('No matching sessions')) {
+                    const now = Date.now();
+                    if (now - this.lastErrorTime > 60000) {
+                        this.errorCount = 0; // Reset count if > 1 minute since last burst
+                    }
+                    this.errorCount++;
+                    this.lastErrorTime = now;
+
+                    if (this.errorCount > 5) { // 5 errors in < 1 minute is suspicious
+                        console.error(`[Instance ${this.id}]: CRITICAL - Detected Session Corruption (Bad MAC loop). Deleting Auth and Stopping.`);
+                        this.deleteAuth().then(() => {
+                            this.status = 'disconnected';
+                            this.emitStatusUpdate();
+                        });
+                        return;
+                    }
+                }
+                
                 // If we see the Timeout message, trigger a manual history refresh check
-                if (JSON.stringify(events).includes('Timeout in AwaitingInitialSync')) {
+                if (jsonEvents.includes('Timeout in AwaitingInitialSync')) {
                     console.log(`[Instance ${this.id}]: Sync Timeout detected. Forcing History Worker...`);
                     this.workerManager?.startAll();
                 }

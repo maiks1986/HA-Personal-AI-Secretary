@@ -1,8 +1,8 @@
 {
-  "timestamp": "2026-01-30T04:30:00.000Z",
-  "description": "Bumped version to 1.9.1.0019. Switched AI model to 'gemini-2.5-flash-lite' and updated @google/generative-ai library to ^0.24.1.",
+  "timestamp": "2026-01-30T05:00:00.000Z",
+  "description": "Bumped version to 1.9.1.0020. Implemented 'Bad MAC' Health Monitor. If the engine detects >5 session decryption errors in a minute, it will automatically delete the corrupted session to prevent infinite error loops and force a clean state.",
   "modules_affected": [
-    "whatsapp_node/src/services/AiService.ts",
+    "whatsapp_node/src/manager/WhatsAppInstance.ts",
     "whatsapp_node/config.yaml",
     "whatsapp_node/package.json",
     "whatsapp_node/src/last_fixes.json"
