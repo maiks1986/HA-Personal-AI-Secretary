@@ -39,7 +39,7 @@ class AiService {
         const client = await this.getClient();
         if (!client) return "API Key Missing";
 
-        const model = client.getGenerativeModel({ model: "gemini-1.5-flash-latest" });
+        const model = client.getGenerativeModel({ model: "gemini-1.5-flash" });
         
         const context = messages.map(m => `${m.is_from_me ? 'Me' : 'Them'}: ${m.text}`).join('\n');
         const prompt = `
@@ -54,8 +54,9 @@ class AiService {
         try {
             const result = await model.generateContent(prompt);
             return result.response.text().trim();
-        } catch (e) {
-            console.error('TRACE [AiService]: analyzeIntent error:', e);
+        } catch (e: any) {
+            console.error('TRACE [AiService]: analyzeIntent error:', e.message || e);
+            if (e.message && e.message.includes('429')) return "Quota Exceeded";
             return "Analysis Error";
         }
     }
@@ -65,7 +66,7 @@ class AiService {
         const client = await this.getClient();
         if (!client) return "API Key Missing";
 
-        const model = client.getGenerativeModel({ model: "gemini-1.5-flash-latest" });
+        const model = client.getGenerativeModel({ model: "gemini-1.5-flash" });
         
         const context = messages.map(m => `${m.is_from_me ? 'Me' : 'Them'}: ${m.text}`).join('\n');
         const prompt = `
@@ -82,8 +83,8 @@ class AiService {
         try {
             const result = await model.generateContent(prompt);
             return result.response.text().trim();
-        } catch (e) {
-            console.error('TRACE [AiService]: generateDraft error:', e);
+        } catch (e: any) {
+            console.error('TRACE [AiService]: generateDraft error:', e.message || e);
             return "Draft Error";
         }
     }
