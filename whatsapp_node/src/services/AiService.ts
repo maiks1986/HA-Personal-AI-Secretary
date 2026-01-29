@@ -1,32 +1,40 @@
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import { getDb } from "../db/database";
+import fs from 'fs';
+import path from 'path';
 
 class AiService {
     private genAI: GoogleGenerativeAI | null = null;
 
     private async getClient() {
-        console.log('TRACE [AiService]: getClient() called');
         if (this.genAI) return this.genAI;
         
         // 1. Try reading from HA Options first
         let apiKey: string | null = null;
         try {
-            const OPTIONS_PATH = '/data/options.json';
-            if (require('fs').existsSync(OPTIONS_PATH)) {
-                const config = JSON.parse(require('fs').readFileSync(OPTIONS_PATH, 'utf8'));
+            const OPTIONS_PATH = process.env.NODE_ENV === 'development' 
+                ? path.join(__dirname, '../../options.json') 
+                : '/data/options.json';
+
+            if (fs.existsSync(OPTIONS_PATH)) {
+                const config = JSON.parse(fs.readFileSync(OPTIONS_PATH, 'utf8'));
                 apiKey = config.gemini_api_key;
+                if (apiKey) console.log('TRACE [AiService]: Loaded API Key from Add-on options.');
             }
-        } catch (e) {}
+        } catch (e) {
+            console.error('TRACE [AiService]: Error reading options.json:', e);
+        }
 
         // 2. Fallback to Database if HA setting is empty
         if (!apiKey) {
             const db = getDb();
             const row = db.prepare('SELECT value FROM settings WHERE key = ?').get('gemini_api_key') as any;
             apiKey = row?.value;
+            if (apiKey) console.log('TRACE [AiService]: Loaded API Key from Database.');
         }
 
         if (!apiKey) {
-            console.warn("TRACE [AiService]: No Gemini API Key found in HA settings or database.");
+            console.warn("TRACE [AiService]: No Gemini API Key found in Add-on settings or database.");
             return null;
         }
         
