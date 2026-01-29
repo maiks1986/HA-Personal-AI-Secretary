@@ -61,9 +61,21 @@ export class WhatsAppInstance {
                 browser: Browsers.ubuntu('Chrome'),
                 syncFullHistory: true,
                 markOnlineOnConnect: this.presence === 'available',
-                connectTimeoutMs: 600000,
-                defaultQueryTimeoutMs: 600000,
+                connectTimeoutMs: 120000, // Increased to 2m
+                defaultQueryTimeoutMs: 120000,
+                generateHighQualityLinkPreview: true,
                 logger: this.logger
+            });
+
+            // 1. ATTACH CATCH-ALL IMMEDIATELY (Do not move this!)
+            (this.sock.ev as any).on('events', (events: any) => {
+                this.io.emit('raw_whatsapp_event', { timestamp: new Date().toISOString(), instanceId: this.id, events });
+                
+                // If we see the Timeout message, trigger a manual history refresh check
+                if (JSON.stringify(events).includes('Timeout in AwaitingInitialSync')) {
+                    console.log(`[Instance ${this.id}]: Sync Timeout detected. Forcing History Worker...`);
+                    this.workerManager?.startAll();
+                }
             });
 
             // Initialize Managers
@@ -101,11 +113,7 @@ export class WhatsAppInstance {
 
             this.sock.ev.on('creds.update', saveCreds);
 
-            // Events
-            (this.sock.ev as any).on('events', (events: any) => {
-                this.io.emit('raw_whatsapp_event', { timestamp: new Date().toISOString(), instanceId: this.id, events });
-            });
-
+            // Sync Listeners
             this.sock.ev.on('messaging-history.set', (payload) => this.messageManager?.handleHistorySet(payload));
             this.sock.ev.on('chats.upsert', (chats) => this.messageManager?.handleChatsUpsert(chats));
             this.sock.ev.on('chats.update', (updates) => this.messageManager?.handleChatsUpdate(updates));
