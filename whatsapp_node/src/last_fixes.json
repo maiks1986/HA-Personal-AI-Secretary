@@ -1,12 +1,8 @@
 {
-  "timestamp": "2026-01-29T10:30:00.000Z",
-  "description": "Fixed QR code display, backend socket sync, stale frontend state, database migrations, and instance deletion bugs.",
+  "timestamp": "2026-01-29T10:45:00.000Z",
+  "description": "Bumped version to 1.9.1.0001 to force Addon update. Includes all previous QR and database fixes.",
   "modules_affected": [
-    "QRManager.ts (New)",
-    "QRSystem.tsx (New)",
-    "WhatsAppInstance.ts",
-    "instances.ts",
-    "useWhatsApp.ts",
-    "database.ts"
+    "config.yaml",
+    "package.json"
   ]
 }
