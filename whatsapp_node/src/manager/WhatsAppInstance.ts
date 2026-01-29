@@ -17,12 +17,13 @@ import { normalizeJid } from '../utils';
 import { MessageManager } from './modules/MessageManager';
 import { WorkerManager } from './modules/WorkerManager';
 import { ChatManager } from './modules/ChatManager';
+import { QRManager } from './modules/QRManager';
 
 export class WhatsAppInstance {
     public id: number;
     public name: string;
     public sock: WASocket | null = null;
-    public qr: string | null = null;
+    // public qr: string | null = null; // Removed in favor of getter
     public status: string = 'disconnected';
     public presence: 'available' | 'unavailable' = 'available';
     private authPath: string;
@@ -35,6 +36,7 @@ export class WhatsAppInstance {
     private messageManager: MessageManager | null = null;
     private workerManager: WorkerManager | null = null;
     private chatManager: ChatManager | null = null;
+    private qrManager: QRManager;
 
     constructor(id: number, name: string, io: any, debugEnabled: boolean = false) {
         this.id = id;
@@ -45,6 +47,11 @@ export class WhatsAppInstance {
             ? path.join(__dirname, `../../auth_info_${id}`)
             : `/data/auth_info_${id}`;
         this.logger = pino({ level: this.debugEnabled ? 'debug' : 'info' });
+        this.qrManager = new QRManager();
+    }
+
+    get qr(): string | null {
+        return this.qrManager.getQr();
     }
 
     async init() {
@@ -86,19 +93,26 @@ export class WhatsAppInstance {
             // Connection Updates
             this.sock.ev.on('connection.update', async (update) => {
                 const { connection, lastDisconnect, qr } = update;
-                if (qr) this.qr = await qrcode.toDataURL(qr);
+                if (qr) {
+                    await this.qrManager.processUpdate(qr);
+                    this.emitStatusUpdate();
+                }
                 
                 if (connection === 'open') {
                     this.status = 'connected';
+                    this.qrManager.clear();
                     dbInstance.prepare('UPDATE instances SET status = ? WHERE id = ?').run('connected', this.id);
                     this.workerManager?.startAll();
+                    this.emitStatusUpdate();
                 }
 
                 if (connection === 'close') {
                     const statusCode = (lastDisconnect?.error as Boom)?.output?.statusCode;
                     this.status = 'disconnected';
                     this.sock = null;
+                    this.qrManager.clear();
                     dbInstance.prepare('UPDATE instances SET status = ? WHERE id = ?').run('disconnected', this.id);
+                    this.emitStatusUpdate();
                     
                     if (statusCode === DisconnectReason.loggedOut) {
                         await this.deleteAuth();
@@ -142,6 +156,18 @@ export class WhatsAppInstance {
     async setPresence(presence: 'available' | 'unavailable') {
         this.presence = presence;
         if (this.sock) await this.sock.sendPresenceUpdate(presence);
+        this.emitStatusUpdate();
+    }
+
+    private emitStatusUpdate() {
+        if (this.io) {
+            this.io.emit('instances_status', [{
+                id: this.id,
+                status: this.status,
+                presence: this.presence,
+                qr: this.qrManager.getQr()
+            }]);
+        }
     }
 
     async reconnect() {

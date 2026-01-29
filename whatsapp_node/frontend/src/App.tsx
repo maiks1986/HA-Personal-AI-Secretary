@@ -13,6 +13,7 @@ import { GroupModal } from './components/Modals/GroupModal';
 import { StatusViewer } from './components/Modals/StatusViewer';
 import { SettingsModal } from './components/Modals/SettingsModal';
 import { AddInstanceModal } from './components/Modals/AddInstanceModal';
+import { QRSystem } from './systems/QRSystem';
 import Debug from './Debug';
 
 const App = () => {
@@ -179,6 +180,8 @@ const App = () => {
           onSubmit={() => api.createInstance(newInstanceName).then(() => { setIsAddingInstance(false); wa.fetchInstances(); })}
         />
       )}
+
+      <QRSystem selectedInstance={wa.selectedInstance} />
 
       {showDebug && <Debug onClose={() => setShowDebug(false)} />}
     </div>

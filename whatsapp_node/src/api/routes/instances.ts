@@ -15,7 +15,19 @@ export const instancesRouter = () => {
         } else {
             instances = db.prepare('SELECT * FROM instances WHERE ha_user_id = ?').all(user.id);
         }
-        res.json(instances);
+
+        const instancesWithQr = instances.map((inst: any) => {
+            const activeInstance = engineManager.getInstance(inst.id);
+            return {
+                ...inst,
+                qr: activeInstance ? activeInstance.qr : null,
+                status: activeInstance ? activeInstance.status : inst.status
+            };
+        });
+
+        console.log('[API] GET /instances response:', JSON.stringify(instancesWithQr.map(i => ({ id: i.id, status: i.status, hasQr: !!i.qr }))));
+
+        res.json(instancesWithQr);
     });
 
     router.post('/', requireAuth, async (req, res) => {

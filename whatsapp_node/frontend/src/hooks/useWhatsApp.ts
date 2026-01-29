@@ -51,6 +51,16 @@ export const useWhatsApp = (authState: string) => {
     } catch (e) {}
   };
 
+  // Sync selectedInstance with instances updates
+  useEffect(() => {
+    if (selectedInstance) {
+      const updated = instances.find(i => i.id === selectedInstance.id);
+      if (updated && (updated.status !== selectedInstance.status || updated.qr !== selectedInstance.qr || updated.presence !== selectedInstance.presence)) {
+        setSelectedInstance(updated);
+      }
+    }
+  }, [instances]);
+
   useEffect(() => {
     if (authState !== 'authenticated') return;
     fetchInstances();
