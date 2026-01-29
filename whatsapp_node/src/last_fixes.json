@@ -1,8 +1,8 @@
 {
-  "timestamp": "2026-01-30T03:00:00.000Z",
-  "description": "Bumped version to 1.9.1.0016. Improved Ingress authentication by checking for 'x-ingress-path' header to fix auto-login issues.",
+  "timestamp": "2026-01-30T03:30:00.000Z",
+  "description": "Bumped version to 1.9.1.0017. Reverted model name to 'gemini-1.5-flash-latest' to fix 404 error with Google Generative AI API.",
   "modules_affected": [
-    "whatsapp_node/src/api/authMiddleware.ts",
+    "whatsapp_node/src/services/AiService.ts",
     "whatsapp_node/config.yaml",
     "whatsapp_node/package.json",
     "whatsapp_node/src/last_fixes.json"
