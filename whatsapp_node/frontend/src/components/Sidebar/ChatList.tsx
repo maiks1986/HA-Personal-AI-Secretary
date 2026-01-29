@@ -36,7 +36,7 @@ export const ChatList: React.FC<ChatListProps> = ({
   presenceMap
 }) => {
   return (
-    <div className="w-[450px] bg-white border-r border-slate-200 flex flex-col overflow-hidden">
+    <div className="w-[450px] bg-white border-r border-slate-200 flex flex-col overflow-hidden shrink-0">
       <header className="p-4 border-b bg-slate-50/50 flex flex-col gap-4">
         <div className="flex justify-between items-center">
           <div className="flex gap-4">

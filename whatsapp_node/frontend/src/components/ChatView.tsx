@@ -53,7 +53,7 @@ export const ChatView: React.FC<ChatViewProps> = ({
   }
 
   return (
-    <div className="flex-1 flex flex-col relative shadow-2xl">
+    <div className="flex-1 flex flex-col relative shadow-2xl min-w-0">
       <header className="p-4 bg-slate-50 border-b flex justify-between items-center shadow-sm z-10">
         <div className="flex items-center gap-3">
           <div className="w-10 h-10 bg-slate-300 rounded-full flex items-center justify-center shadow-inner text-slate-500"><CircleDot size={24} /></div>

@@ -1,9 +1,11 @@
 {
-  "timestamp": "2026-01-29T21:45:00.000Z",
-  "description": "Bumped version to 1.9.1.0006. Fixed cross-platform build command in package.json and verified frontend types.",
+  "timestamp": "2026-01-29T22:30:00.000Z",
+  "description": "Bumped version to 1.9.1.0007. Fixed frontend layout bug where large texts caused the sidebar to disappear (Added shrink-0 to Sidebar and min-w-0 to ChatView).",
   "modules_affected": [
-    "whatsapp_node/package.json",
+    "whatsapp_node/frontend/src/components/Sidebar/ChatList.tsx",
+    "whatsapp_node/frontend/src/components/ChatView.tsx",
     "whatsapp_node/config.yaml",
+    "whatsapp_node/package.json",
     "whatsapp_node/src/last_fixes.json"
   ]
 }
