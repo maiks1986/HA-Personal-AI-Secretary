@@ -19,10 +19,23 @@ export class MessageManager {
             if (contacts) {
                 for (const contact of contacts) {
                     if (contact.id.includes('@broadcast')) continue;
-                    const normalized = normalizeJid(contact.id);
+                    
+                    let id = contact.id;
+                    const lid = contact.lid || (id.includes('@lid') ? id : null);
+                    
+                    // Basic heuristic: If ID is LID, checking if there's an obvious way to get Phone JID (not standard in Baileys types but checking 'phoneNumber')
+                    // Note: Baileys v7+ might separate these. For now, we store what we get, but capture LID.
+                    
+                    const normalized = normalizeJid(id);
                     const name = contact.name || contact.notify || contact.verifiedName;
                     if (name) {
-                        db.prepare('INSERT INTO contacts (instance_id, jid, name) VALUES (?, ?, ?) ON CONFLICT(instance_id, jid) DO UPDATE SET name = excluded.name').run(this.instanceId, normalized, name);
+                        db.prepare(`
+                            INSERT INTO contacts (instance_id, jid, name, lid) 
+                            VALUES (?, ?, ?, ?) 
+                            ON CONFLICT(instance_id, jid) DO UPDATE SET 
+                            name = excluded.name,
+                            lid = COALESCE(excluded.lid, contacts.lid)
+                        `).run(this.instanceId, normalized, name, lid);
                     }
                 }
             }
@@ -69,9 +82,21 @@ export class MessageManager {
     async handleContactsUpsert(contacts: Contact[]) {
         const db = getDb();
         for (const contact of contacts) {
-            const normalized = normalizeJid(contact.id);
+            let id = contact.id;
+            const lid = (contact as any).lid || (id.includes('@lid') ? id : null);
+            
+            const normalized = normalizeJid(id);
             const name = contact.name || contact.notify || contact.verifiedName;
-            if (name) db.prepare('INSERT INTO contacts (instance_id, jid, name) VALUES (?, ?, ?) ON CONFLICT(instance_id, jid) DO UPDATE SET name = excluded.name').run(this.instanceId, normalized, name);
+            
+            if (name) {
+                 db.prepare(`
+                    INSERT INTO contacts (instance_id, jid, name, lid) 
+                    VALUES (?, ?, ?, ?) 
+                    ON CONFLICT(instance_id, jid) DO UPDATE SET 
+                    name = excluded.name,
+                    lid = COALESCE(excluded.lid, contacts.lid)
+                `).run(this.instanceId, normalized, name, lid);
+            }
         }
     }
 
@@ -79,9 +104,17 @@ export class MessageManager {
         const db = getDb();
         for (const update of updates) {
             if (!update.id) continue;
+            
+            // If update.id is LID, we should try to update the LID column for the corresponding Phone JID if we can...
+            // But we don't know the Phone JID here easily.
+            // So we just update the row where jid = update.id (which might be the LID row).
+            
             const normalized = normalizeJid(update.id);
             const name = update.name || update.notify || update.verifiedName;
+            const lid = (update as any).lid;
+            
             if (name) db.prepare('UPDATE contacts SET name = ? WHERE instance_id = ? AND jid = ?').run(name, this.instanceId, normalized);
+            if (lid) db.prepare('UPDATE contacts SET lid = ? WHERE instance_id = ? AND jid = ?').run(lid, this.instanceId, normalized);
         }
     }
 

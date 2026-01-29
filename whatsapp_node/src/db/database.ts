@@ -141,8 +141,9 @@ export function initDatabase() {
     ensureColumn('messages', 'parent_message_id', 'TEXT');
     ensureColumn('messages', 'status', "TEXT DEFAULT 'sent'");
 
-    // Instance Migrations
-    ensureColumn('instances', 'presence', "TEXT DEFAULT 'available'");
+    // Contact Migrations
+    ensureColumn('contacts', 'lid', 'TEXT');
+    ensureColumn('contacts', 'profile_picture', 'TEXT');
 
     console.log('DATABASE: Initialization and Migrations complete.');
 }
