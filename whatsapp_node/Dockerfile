@@ -21,5 +21,6 @@ RUN npm run build
 # Copy built frontend assets to backend dist/public
 COPY --from=build-frontend /app/dist/public ./dist/public
 
+ENV NODE_ENV=production
 EXPOSE 5002
 CMD ["npm", "start"]

@@ -1,8 +1,9 @@
 {
-  "timestamp": "2026-01-30T10:00:00.000Z",
-  "description": "Bumped version to 1.9.1.0025. Added temporary insecure endpoint /api/debug/raw_logs_dump to stream log file directly for debugging access issues.",
+  "timestamp": "2026-01-30T11:00:00.000Z",
+  "description": "Bumped version to 1.9.1.0026. Added debug logging for Log File path resolution and write access checks. Enforced NODE_ENV=production in Dockerfile.",
   "modules_affected": [
-    "whatsapp_node/src/api/routes/system.ts",
+    "whatsapp_node/src/manager/WhatsAppInstance.ts",
+    "whatsapp_node/Dockerfile",
     "whatsapp_node/config.yaml",
     "whatsapp_node/package.json",
     "whatsapp_node/src/last_fixes.json"

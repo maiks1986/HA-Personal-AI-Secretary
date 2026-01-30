@@ -58,6 +58,13 @@ export class WhatsAppInstance {
         this.logPath = process.env.NODE_ENV === 'development' ? path.join(__dirname, '../../raw_events.log') : '/data/raw_events.log';
         this.logger = pino({ level: this.debugEnabled ? 'debug' : 'info' });
         this.qrManager = new QRManager();
+        
+        console.log(`[WhatsAppInstance ${this.id}]: Log Path set to: ${this.logPath}`);
+        try {
+            fs.appendFileSync(this.logPath, `[${new Date().toISOString()}] Instance ${this.id} initialized.\n`);
+        } catch (e) {
+            console.error(`[WhatsAppInstance ${this.id}]: FAILED TO WRITE TO LOG FILE!`, e);
+        }
     }
 
     get qr(): string | null {
