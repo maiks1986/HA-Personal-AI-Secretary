@@ -1,70 +1,75 @@
-# Plan: Ephemeral Message Watcher (Modular System)
+# Plan: Stealth Mode Scheduler
 
-## Core Philosophy: Modularization
-To prevent regression and accidental deletion, all logic related to Ephemeral Messages will be encapsulated in a single, dedicated module.
+## Overview
+Allows users to schedule privacy changes (Online/Last Seen visibility) based on time and day.
 
-## 1. File Structure
-*   **Backend:** `whatsapp_node/src/manager/modules/EphemeralManager.ts`
-    *   This class will handle the database polling, logic, and Baileys interaction.
-    *   It will expose public methods like `start()`, `stop()`, `enableForChat()`, `disableForChat()`.
-    *   It will be instantiated once in `WhatsAppInstance` and kept as a property `this.ephemeralManager`.
+---
 
-## 2. Database Changes
-*   **Migrations:**
-    *   `chats`: `ephemeral_mode` (INT), `ephemeral_timer` (INT), `ephemeral_start_ts` (INT/TEXT).
-    *   `messages`: `deleted_on_device` (INT).
-    *   `settings`: 
-        *   `ephemeral_trigger_start` (default: 👻)
-        *   `ephemeral_trigger_stop` (default: 🛑)
+## Option A: "Specific People" (Granular Control)
+**Goal:** Hide status from *only* selected contacts (e.g., Boss) during specific hours, while remaining visible to others.
 
-## 3. The `EphemeralManager` Class
-```typescript
-export class EphemeralManager {
-    constructor(private instanceId: number, private sock: any) {}
+### Mechanism
+1.  WhatsApp has a privacy setting: `lastSeen: "contact_blacklist"` (My Contacts Except...).
+2.  **The Challenge:** There is no simple Baileys function like `addToPrivacyExclusionList()`. We must construct a raw XML IQ stanza to send to the WhatsApp servers to update this specific list.
+3.  **Workflow:**
+    *   **Start Time:**
+        1.  Fetch current exclusion list (if possible) or maintain a local list.
+        2.  Add the "Stealth Targets" to this list.
+        3.  Send XML to update the list on WA servers.
+        4.  Call `sock.updatePrivacySetting('lastSeen', 'contact_blacklist')`.
+        5.  Call `sock.updatePrivacySetting('online', 'match_last_seen')`.
+    *   **End Time:**
+        1.  Remove "Stealth Targets" from the list.
+        2.  Send XML update.
+        3.  (Optional) Revert privacy setting if the list is empty.
 
-    public start() {
-        // Start the 5-minute interval loop
-    }
+### Pros & Cons
+*   **Pro:** Exact control. Doesn't hide you from friends/family.
+*   **Con:** High technical risk. Requires using undocumented/internal protocol features (IQ nodes). If WhatsApp changes the protocol node structure, this breaks immediately.
 
-    public async enableForChat(jid: string, timerMinutes: number) {
-        // Update DB
-    }
+---
 
-    public async disableForChat(jid: string) {
-        // Update DB
-    }
+## Option B: "Global Toggle" (Reliable Control)
+**Goal:** Hide status from *Everyone* (or set to "My Contacts") during specific hours.
 
-    private async processCleanup() {
-        // 1. Query candidate messages
-        // 2. Batch by chat
-        // 3. Execute sock.chatModify({ clear: ... })
-        // 4. Update messages as deleted_on_device
-    }
-    
-    public async handleIncomingMessage(jid: string, text: string) {
-       // Check settings for start/stop emojis
-       // Toggle mode if matched
-    }
-}
-```
+### Mechanism
+1.  Uses standard, supported Baileys APIs: `sock.updatePrivacySetting()`.
+2.  **Workflow:**
+    *   **Start Time:**
+        *   Call `sock.updatePrivacySetting('lastSeen', 'none')` (Nobody).
+        *   Call `sock.updatePrivacySetting('online', 'match_last_seen')`.
+    *   **End Time:**
+        *   Call `sock.updatePrivacySetting('lastSeen', 'all')` (Everyone) OR `'contacts'` (My Contacts).
 
-## 4. Integration Points
-*   **`WhatsAppInstance.ts`:**
-    *   Import `EphemeralManager`.
-    *   `this.ephemeralManager = new EphemeralManager(this.id, this.sock);`
-    *   `this.ephemeralManager.start();`
-*   **`messaging.ts` (Routes):**
-    *   Add route `POST /api/chats/:jid/ephemeral` -> delegates to `instance.ephemeralManager`.
-*   **`MessageManager.ts`:**
-    *   Call `instance.ephemeralManager.handleIncomingMessage(jid, text)` on every new message.
+### Pros & Cons
+*   **Pro:** Extremely reliable. Supported by official library methods. Unlikely to break.
+*   **Con:** It's "All or Nothing". You hide from your spouse at the same time you hide from your boss.
 
-## 5. Frontend
-*   **`ChatView.tsx`:** Add the UI toggle.
-*   **`SettingsModal.tsx`:** Add inputs for "Start Emoji" and "Stop Emoji".
+---
 
-## 6. Execution Plan
-1.  **Migrate:** Update `database.ts` with new columns.
-2.  **Create:** `EphemeralManager.ts` with the logic.
-3.  **Integrate:** Wire it into `WhatsAppInstance.ts` and `messaging.ts`.
-4.  **Feature:** Add emoji detection in `MessageManager`.
-5.  **UI:** Add the button in `ChatView.tsx` and settings in `SettingsModal.tsx`.
+## Shared Architecture (Database & UI)
+Regardless of the option, the data structure is similar.
+
+### Database
+*   `stealth_schedules` table:
+    *   `id`, `instance_id`, `name`, `start_time` (HH:MM), `end_time` (HH:MM), `days`, `enabled`.
+    *   `mode`: 'GLOBAL_NOBODY' (Option B) or 'SPECIFIC_CONTACTS' (Option A).
+*   `stealth_targets` table (Only used for Option A):
+    *   `schedule_id`, `jid`.
+
+### UI
+*   **Settings -> Stealth Scheduler:**
+    *   List of active schedules.
+    *   **Add Schedule Modal:**
+        *   Name input.
+        *   Time Range pickers.
+        *   Day selector (M T W T F S S).
+        *   **Mode Selector:** "Hide from Everyone" vs "Hide from Specific People".
+        *   **Contact Picker:** Only shown if "Specific People" is selected.
+
+---
+
+## Recommendation
+We can build the **Shared Architecture** first.
+Then, we implement **Option B** as the baseline.
+Finally, we *attempt* **Option A**. If the raw XML query fails or is too unstable, we disable that mode in the UI or fallback to Option B.

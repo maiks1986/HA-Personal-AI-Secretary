@@ -59,5 +59,10 @@ export const api = {
   // Settings
   getSetting: (key: string) => axios.get<{ value: string }>(`/api/settings/${key}`),
   saveSetting: (key: string, value: string) => axios.post('/api/settings', { key, value }),
-  resetSystem: () => axios.post('/api/system/reset')
+  resetSystem: () => axios.post('/api/system/reset'),
+
+  // Stealth Scheduler
+  getStealthSchedules: (instanceId: number) => axios.get(`/api/stealth/schedules/${instanceId}`),
+  createStealthSchedule: (data: any) => axios.post('/api/stealth/schedules', data),
+  deleteStealthSchedule: (id: number) => axios.delete(`/api/stealth/schedules/${id}`)
 };

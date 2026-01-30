@@ -166,6 +166,7 @@ const App = () => {
       {isSettingsOpen && (
         <SettingsModal 
           onClose={() => setIsSettingsOpen(false)}
+          selectedInstanceId={wa.selectedInstance?.id}
           geminiKey={wa.geminiKey}
           setGeminiKey={wa.setGeminiKey}
           autoNudge={wa.autoNudge}

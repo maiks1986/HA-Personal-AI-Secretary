@@ -112,6 +112,27 @@ export function initDatabase() {
         )
     `).run();
 
+    db.prepare(`
+        CREATE TABLE IF NOT EXISTS stealth_schedules (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            instance_id INTEGER,
+            name TEXT,
+            start_time TEXT,
+            end_time TEXT,
+            days TEXT,
+            mode TEXT,
+            is_enabled INTEGER DEFAULT 1
+        )
+    `).run();
+
+    db.prepare(`
+        CREATE TABLE IF NOT EXISTS stealth_targets (
+            schedule_id INTEGER,
+            contact_jid TEXT,
+            PRIMARY KEY (schedule_id, contact_jid)
+        )
+    `).run();
+
     // 2. MIGRATIONS (Ensure columns exist for legacy databases)
     const tables = ['chats', 'messages', 'instances'];
     

@@ -84,5 +84,33 @@ export const systemRouter = () => {
         res.json({ draft });
     });
 
+    // Stealth Scheduler Routes
+    router.get('/stealth/schedules/:instanceId', requireAuth, (req, res) => {
+        const { instanceId } = req.params;
+        const schedules = db.prepare('SELECT * FROM stealth_schedules WHERE instance_id = ?').all(instanceId) as any[];
+        for (const s of schedules) {
+            s.targets = db.prepare('SELECT contact_jid FROM stealth_targets WHERE schedule_id = ?').all(s.id);
+        }
+        res.json(schedules);
+    });
+
+    router.post('/stealth/schedules', requireAuth, (req, res) => {
+        const { instanceId, name, start_time, end_time, days, mode, targets } = req.body;
+        const info = db.prepare('INSERT INTO stealth_schedules (instance_id, name, start_time, end_time, days, mode) VALUES (?, ?, ?, ?, ?, ?)').run(instanceId, name, start_time, end_time, JSON.stringify(days), mode);
+        const scheduleId = info.lastInsertRowid;
+
+        if (targets && Array.isArray(targets)) {
+            const stmt = db.prepare('INSERT INTO stealth_targets (schedule_id, contact_jid) VALUES (?, ?)');
+            for (const jid of targets) stmt.run(scheduleId, jid);
+        }
+        res.json({ success: true, id: scheduleId });
+    });
+
+    router.delete('/stealth/schedules/:id', requireAuth, (req, res) => {
+        db.prepare('DELETE FROM stealth_targets WHERE schedule_id = ?').run(req.params.id);
+        db.prepare('DELETE FROM stealth_schedules WHERE id = ?').run(req.params.id);
+        res.json({ success: true });
+    });
+
     return router;
 };

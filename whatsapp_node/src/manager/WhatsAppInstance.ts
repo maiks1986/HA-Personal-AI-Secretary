@@ -19,6 +19,7 @@ import { WorkerManager } from './modules/WorkerManager';
 import { ChatManager } from './modules/ChatManager';
 import { QRManager } from './modules/QRManager';
 import { EphemeralManager } from './modules/EphemeralManager';
+import { StealthManager } from './modules/StealthManager';
 
 export class WhatsAppInstance {
     public id: number;
@@ -39,6 +40,7 @@ export class WhatsAppInstance {
     private workerManager: WorkerManager | null = null;
     private chatManager: ChatManager | null = null;
     public ephemeralManager: EphemeralManager | null = null;
+    public stealthManager: StealthManager | null = null;
     private qrManager: QRManager;
     
     // Health Monitor
@@ -126,6 +128,8 @@ export class WhatsAppInstance {
             this.chatManager = new ChatManager(this.id, this.sock, this.io);
             this.ephemeralManager = new EphemeralManager(this.id, this.sock, this.io);
             this.ephemeralManager.start();
+            this.stealthManager = new StealthManager(this.id, this.sock);
+            this.stealthManager.start();
 
             // Connection Updates
             this.sock.ev.on('connection.update', async (update) => {
