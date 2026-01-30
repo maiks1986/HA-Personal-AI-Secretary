@@ -3,13 +3,15 @@ import makeWASocket, {
     useMultiFileAuthState, 
     fetchLatestBaileysVersion, 
     WASocket,
-    Browsers
+    Browsers,
+    makeCacheableSignalKeyStore
 } from '@whiskeysockets/baileys';
 import { Boom } from '@hapi/boom';
 import qrcode from 'qrcode';
 import path from 'path';
 import fs from 'fs';
 import pino from 'pino';
+import NodeCache from 'node-cache';
 import { getDb } from '../db/database';
 import { normalizeJid } from '../utils';
 
@@ -34,6 +36,7 @@ export class WhatsAppInstance {
     private debugEnabled: boolean;
     private io: any;
     private logger: any;
+    private msgRetryCounterCache: NodeCache;
 
     // Managers
     private messageManager: MessageManager | null = null;
@@ -58,6 +61,7 @@ export class WhatsAppInstance {
         this.logPath = process.env.NODE_ENV === 'development' ? path.join(__dirname, '../../raw_events.log') : '/data/raw_events.log';
         this.logger = pino({ level: this.debugEnabled ? 'debug' : 'info' });
         this.qrManager = new QRManager();
+        this.msgRetryCounterCache = new NodeCache();
         
         console.log(`[WhatsAppInstance ${this.id}]: Log Path set to: ${this.logPath}`);
         try {
@@ -80,15 +84,19 @@ export class WhatsAppInstance {
 
             this.sock = makeWASocket({
                 version,
-                auth: state,
+                auth: {
+                    creds: state.creds,
+                    keys: makeCacheableSignalKeyStore(state.keys, this.logger),
+                },
                 printQRInTerminal: false,
-                browser: Browsers.ubuntu('Chrome'),
+                browser: ['WhatsApp Node Engine', 'Chrome', '1.0.0'],
                 syncFullHistory: true,
                 markOnlineOnConnect: this.presence === 'available',
                 connectTimeoutMs: 120000, // Increased to 2m
                 defaultQueryTimeoutMs: 120000,
                 generateHighQualityLinkPreview: true,
-                logger: this.logger
+                logger: this.logger,
+                msgRetryCounterCache: this.msgRetryCounterCache
             });
 
             // 1. ATTACH CATCH-ALL IMMEDIATELY (Do not move this!)
