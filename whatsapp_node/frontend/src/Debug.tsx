@@ -22,7 +22,7 @@ const Debug = ({ onClose }: { onClose: () => void }) => {
     const fetchHistory = async () => {
         setIsLoading(true);
         try {
-            const res = await axios.get(`/api/debug/raw_logs?limit=${lineLimit}`);
+            const res = await axios.get(`api/debug/raw_logs?limit=${lineLimit}`);
             setEvents(res.data.map((log: any) => ({
                 id: Math.random(),
                 timestamp: new Date(log.timestamp).toLocaleTimeString(),
@@ -36,7 +36,7 @@ const Debug = ({ onClose }: { onClose: () => void }) => {
         setIsLoading(true);
         const newOffset = reset ? 0 : dbOffset;
         try {
-            const res = await axios.get(`/api/debug/db/${dbTable}?limit=50&offset=${newOffset}`);
+            const res = await axios.get(`api/debug/db/${dbTable}?limit=50&offset=${newOffset}`);
             setDbData(res.data);
             if (reset) setDbOffset(0);
         } catch (e) { alert("Failed to fetch DB data"); } finally { setIsLoading(false); }

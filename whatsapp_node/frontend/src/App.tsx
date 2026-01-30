@@ -62,7 +62,7 @@ const App = () => {
     if (wa.messages.length === 0) return;
     setIsAiLoading(true);
     try {
-      const res = await axios.post('/api/ai/draft', { messages: wa.messages.slice(-10), steer: steerText });
+      const res = await axios.post('api/ai/draft', { messages: wa.messages.slice(-10), steer: steerText });
       setInputText(res.data.draft);
     } finally { setIsAiLoading(false); }
   };

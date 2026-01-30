@@ -1,12 +1,9 @@
 {
-  "timestamp": "2026-01-30T08:00:00.000Z",
-  "description": "Bumped version to 1.9.1.0023. Implemented Stealth Mode Scheduler UI and Backend logic. Supports Global Stealth (Nobody) and prepares infrastructure for Targeted Stealth.",
+  "timestamp": "2026-01-30T09:00:00.000Z",
+  "description": "Bumped version to 1.9.1.0024. Fixed frontend API calls to use relative paths, resolving Ingress authentication and 404 errors in the Debugger.",
   "modules_affected": [
-    "whatsapp_node/src/manager/modules/StealthManager.ts",
-    "whatsapp_node/src/manager/WhatsAppInstance.ts",
-    "whatsapp_node/src/db/database.ts",
-    "whatsapp_node/src/api/routes/system.ts",
-    "whatsapp_node/frontend/src/components/Modals/SettingsModal.tsx",
+    "whatsapp_node/frontend/src/Debug.tsx",
+    "whatsapp_node/frontend/src/api/index.ts",
     "whatsapp_node/frontend/src/App.tsx",
     "whatsapp_node/config.yaml",
     "whatsapp_node/package.json",
