@@ -1,4 +1,13 @@
 {
-  "timestamp": "2026-01-31T10:00:00Z",
-  "description": "Initial bootstrap of Calendar Master Add-on"
+  "timestamp": "2026-01-31T10:45:00.000Z",
+  "description": "Initial release of Calendar Master v1.0.0.0001. Features: Google OAuth2 integration, Shadow DB for event caching, Zod-powered fullstack typesafety, and basic HA Add-on infrastructure.",
+  "modules_affected": [
+    "calendar_node/src/index.ts",
+    "calendar_node/src/shared_schemas.ts",
+    "calendar_node/src/manager/GoogleAuthManager.ts",
+    "calendar_node/src/manager/CalendarManager.ts",
+    "calendar_node/src/db/CalendarDatabase.ts",
+    "calendar_node/config.yaml",
+    "calendar_node/package.json"
+  ]
 }

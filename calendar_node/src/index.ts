@@ -39,6 +39,14 @@ const authManager = new GoogleAuthManager(
 );
 const calendarManager = new CalendarManager(authManager, db);
 
+// Log Last Fix Information
+try {
+  const lastFixes = JSON.parse(fs.readFileSync(path.join(__dirname, 'last_fixes.json'), 'utf8'));
+  logger.info(`[SYSTEM] Last Fix: ${lastFixes.description}`);
+} catch (err) {
+  logger.warn('Could not load last_fixes.json');
+}
+
 app.use(cors());
 app.use(express.json());
 
