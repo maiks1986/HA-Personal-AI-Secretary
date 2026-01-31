@@ -87,8 +87,25 @@ export class CalendarDatabase {
     stmt.run(cal.id, cal.instance_id, cal.external_id, cal.summary, cal.role, cal.sync_token, cal.last_sync);
   }
 
-  public getCalendarsByRole(role: string) {
-    return this.db.prepare('SELECT * FROM calendars WHERE role = ?').all(role);
+  public saveEvent(event: any, calendarId: string, instanceId: string) {
+    const stmt = this.db.prepare(`
+      INSERT OR REPLACE INTO events (id, calendar_id, instance_id, summary, description, start_time, end_time, location, status, updated, raw_json)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `);
+
+    stmt.run(
+      event.id,
+      calendarId,
+      instanceId,
+      event.summary || '',
+      event.description || '',
+      event.start?.dateTime || event.start?.date || '',
+      event.end?.dateTime || event.end?.date || '',
+      event.location || '',
+      event.status || '',
+      event.updated || '',
+      JSON.stringify(event)
+    );
   }
 
   public getEvents(startTime: string, endTime: string) {

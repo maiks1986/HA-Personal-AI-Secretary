@@ -44,7 +44,6 @@ export class CalendarManager {
     // 1. Sync Calendar List to update Roles
     const calList = await calendar.calendarList.list();
     for (const cal of calList.data.items || []) {
-       // We don't overwrite role if it already exists in DB
        this.db.saveCalendar({
          id: `${instanceId}_${cal.id}`,
          instance_id: instanceId,
@@ -56,8 +55,22 @@ export class CalendarManager {
        });
     }
 
-    // 2. Sync Events for non-ignored calendars
-    // ... logic to follow
+    // 2. Sync Events for all active calendars
+    // Note: In a future update, we can filter by role here to save API calls
+    const res = await calendar.events.list({
+      calendarId: 'primary',
+      timeMin: new Date().toISOString(),
+      maxResults: 100,
+      singleEvents: true,
+      orderBy: 'startTime',
+    });
+
+    const events = res.data.items || [];
+    for (const event of events) {
+      this.db.saveEvent(event, 'primary', instanceId);
+    }
+
+    logger.info(`Synced ${events.length} events for instance ${instanceId}`);
   }
 
   public async getAggregatedPresence() {
