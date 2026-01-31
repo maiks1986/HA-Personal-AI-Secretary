@@ -74,7 +74,16 @@ export class ProfilePictureManager {
                 if (row?.jid) jid = row.jid;
             }
 
-            const url = await this.sock.profilePictureUrl(jid, 'image'); 
+            // TRY PREVIEW FIRST (Much more likely to succeed for individuals)
+            let url = null;
+            try {
+                url = await this.sock.profilePictureUrl(jid, 'preview');
+            } catch (e) {
+                // If preview fails, try high-res just in case
+                try {
+                    url = await this.sock.profilePictureUrl(jid, 'image');
+                } catch (e2) {}
+            }
             
             if (url) {
                 const response = await axios.get(url, { responseType: 'arraybuffer' });
