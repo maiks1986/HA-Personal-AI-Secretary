@@ -56,7 +56,7 @@ export const messagingRouter = () => {
         const instanceData = db.prepare('SELECT ha_user_id FROM instances WHERE id = ?').get(instanceId) as Instance | undefined;
         if (!user.isAdmin && instanceData?.ha_user_id !== user.id) return res.status(403).json({ error: "Access Denied" });
 
-        // UNIFIED HISTORY: Fetch messages for BOTH the requested JID and its linked LID/Phone JID
+        // 1. Fetch latest 100 messages (Fast initial load)
         const messages = db.prepare(`
             SELECT m.* 
             FROM messages m
@@ -66,12 +66,35 @@ export const messagingRouter = () => {
                 OR m.chat_jid = (SELECT lid FROM contacts WHERE jid = ? AND instance_id = ?)
                 OR m.chat_jid = (SELECT jid FROM contacts WHERE lid = ? AND instance_id = ?)
               )
-            ORDER BY m.timestamp ASC
+            ORDER BY m.timestamp DESC
+            LIMIT 100
         `).all(instanceId, jid, jid, instanceId, jid, instanceId) as any[];
 
-        for (const msg of messages) {
-            msg.reactions = db.prepare('SELECT sender_jid, emoji FROM reactions WHERE instance_id = ? AND message_whatsapp_id = ?').all(instanceId, msg.whatsapp_id);
+        // Reverse to maintain chronological order in UI
+        messages.reverse();
+
+        if (messages.length > 0) {
+            // 2. Optimized Reaction Fetch: Get ALL reactions for these messages in ONE query
+            const messageIds = messages.map(m => m.whatsapp_id);
+            const placeholders = messageIds.map(() => '?').join(',');
+            const allReactions = db.prepare(`
+                SELECT message_whatsapp_id, sender_jid, emoji 
+                FROM reactions 
+                WHERE instance_id = ? AND message_whatsapp_id IN (${placeholders})
+            `).all(instanceId, ...messageIds) as any[];
+
+            // 3. Map reactions to messages in memory
+            const reactionMap: Record<string, any[]> = {};
+            for (const r of allReactions) {
+                if (!reactionMap[r.message_whatsapp_id]) reactionMap[r.message_whatsapp_id] = [];
+                reactionMap[r.message_whatsapp_id].push({ sender_jid: r.sender_jid, emoji: r.emoji });
+            }
+
+            for (const msg of messages) {
+                msg.reactions = reactionMap[msg.whatsapp_id] || [];
+            }
         }
+
         res.json(messages);
     });
 

@@ -1,8 +1,8 @@
 {
-  "timestamp": "2026-01-31T14:00:00.000Z",
-  "description": "Bumped version to 1.9.1.0053. Improved profile picture fetching success rate by prioritizing 'preview' (thumbnail) URLs over high-res 'image' URLs, which are often restricted for individual accounts.",
+  "timestamp": "2026-01-31T15:00:00.000Z",
+  "description": "Bumped version to 1.9.1.0054. Optimized conversation switching performance by replacing the N+1 reaction lookup loop with a single grouped query. Implemented a 100-message limit for initial chat loads to ensure instant UI responsiveness.",
   "modules_affected": [
-    "whatsapp_node/src/manager/modules/ProfilePictureManager.ts",
+    "whatsapp_node/src/api/routes/messaging.ts",
     "whatsapp_node/config.yaml",
     "whatsapp_node/package.json",
     "whatsapp_node/src/last_fixes.json"
