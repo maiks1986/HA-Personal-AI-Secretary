@@ -54,11 +54,12 @@ export class WhatsAppInstance {
     private errorCount: number = 0;
     private lastErrorTime: number = 0;
 
-    constructor(id: number, name: string, io: any, debugEnabled: boolean = false) {
+    constructor(id: number, name: string, io: any, debugEnabled: boolean = false, initialPresence: 'available' | 'unavailable' = 'unavailable') {
         this.id = id;
         this.name = name;
         this.io = io;
         this.debugEnabled = debugEnabled;
+        this.presence = initialPresence;
         this.authPath = process.env.NODE_ENV === 'development'
             ? path.join(__dirname, `../../auth_info_${id}`)
             : `/data/auth_info_${id}`;
@@ -242,6 +243,8 @@ export class WhatsAppInstance {
     async setPresence(presence: 'available' | 'unavailable') {
         this.presence = presence;
         if (this.sock) await this.sock.sendPresenceUpdate(presence);
+        const db = getDb();
+        db.prepare('UPDATE instances SET presence = ? WHERE id = ?').run(presence, this.id);
         this.emitStatusUpdate();
     }
 

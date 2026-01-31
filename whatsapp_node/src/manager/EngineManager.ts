@@ -12,21 +12,21 @@ class EngineManager {
         this.debugEnabled = debugEnabled;
         const db = getDb();
         // Load all instances from DB
-        const rows = db.prepare('SELECT id, name FROM instances').all() as any[];
+        const rows = db.prepare('SELECT id, name, presence FROM instances').all() as any[];
         for (const row of rows) {
-            await this.startInstance(row.id, row.name);
+            await this.startInstance(row.id, row.name, row.presence);
         }
         console.log(`TRACE [EngineManager]: initialized with ${this.instances.size} instances.`);
     }
 
-    async startInstance(id: number, name: string) {
-        console.log(`TRACE [EngineManager]: startInstance(${id}, ${name}) called`);
+    async startInstance(id: number, name: string, presence: 'available' | 'unavailable' = 'unavailable') {
+        console.log(`TRACE [EngineManager]: startInstance(${id}, ${name}, ${presence}) called`);
         if (this.instances.has(id)) {
             console.log(`TRACE [EngineManager]: Instance ${id} already exists.`);
             return this.instances.get(id);
         }
         
-        const instance = new WhatsAppInstance(id, name, this.io, this.debugEnabled);
+        const instance = new WhatsAppInstance(id, name, this.io, this.debugEnabled, presence);
         await instance.init();
         this.instances.set(id, instance);
         return instance;

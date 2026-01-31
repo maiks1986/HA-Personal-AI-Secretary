@@ -1,8 +1,9 @@
 {
-  "timestamp": "2026-01-30T20:00:00.000Z",
-  "description": "Bumped version to 1.9.1.0035. Added 'Social Nudge' API endpoint to allow Home Assistant to generate context-aware check-in messages via AI.",
+  "timestamp": "2026-01-30T21:00:00.000Z",
+  "description": "Bumped version to 1.9.1.0036. Changed default presence to 'unavailable' (Offline) to prevent WhatsApp notification suppression on the primary phone. Added persistence for the Online/Offline toggle.",
   "modules_affected": [
-    "whatsapp_node/src/api/routes/social.ts",
+    "whatsapp_node/src/manager/WhatsAppInstance.ts",
+    "whatsapp_node/src/manager/EngineManager.ts",
     "whatsapp_node/config.yaml",
     "whatsapp_node/package.json",
     "whatsapp_node/src/last_fixes.json"
