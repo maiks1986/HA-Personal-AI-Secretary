@@ -23,6 +23,7 @@ import { QRManager } from './modules/QRManager';
 import { EphemeralManager } from './modules/EphemeralManager';
 import { StealthManager } from './modules/StealthManager';
 import { ProfilePictureManager } from './modules/ProfilePictureManager';
+import { SocialManager } from './modules/SocialManager';
 
 export class WhatsAppInstance {
     public id: number;
@@ -46,6 +47,7 @@ export class WhatsAppInstance {
     public ephemeralManager: EphemeralManager | null = null;
     public stealthManager: StealthManager | null = null;
     public profilePictureManager: ProfilePictureManager | null = null;
+    public socialManager: SocialManager | null = null;
     private qrManager: QRManager;
     
     // Health Monitor
@@ -156,6 +158,7 @@ export class WhatsAppInstance {
             this.stealthManager = new StealthManager(this.id, this.sock);
             this.stealthManager.start();
             this.profilePictureManager = new ProfilePictureManager(this.id, this.sock);
+            this.socialManager = new SocialManager(this.id);
             // ProfilePictureManager starts on demand via enqueue
 
             // Connection Updates
@@ -228,6 +231,7 @@ export class WhatsAppInstance {
 
             this.sock.ev.on('presence.update', (update) => {
                 this.io.emit('presence_update', { instanceId: this.id, jid: normalizeJid(update.id), presence: update.presences });
+                this.socialManager?.handlePresenceUpdate(update.id, update.presences);
             });
 
         } catch (err) {

@@ -13,6 +13,40 @@ export const socialRouter = () => {
         res.json(updates);
     });
 
+    // Tracking Routes
+    router.get('/social/tracked/:instanceId', requireAuth, (req, res) => {
+        const { instanceId } = req.params;
+        const tracked = db.prepare(`
+            SELECT tc.*, c.name 
+            FROM tracked_contacts tc
+            LEFT JOIN contacts c ON tc.jid = c.jid AND tc.instance_id = c.instance_id
+            WHERE tc.instance_id = ?
+        `).all(instanceId);
+        res.json(tracked);
+    });
+
+    router.post('/social/tracked', requireAuth, (req, res) => {
+        const { instanceId, jid } = req.body;
+        const inst = engineManager.getInstance(parseInt(instanceId));
+        if (inst && inst.socialManager) {
+            inst.socialManager.trackContact(jid);
+            res.json({ success: true });
+        } else {
+            res.status(404).json({ error: "Instance not found" });
+        }
+    });
+
+    router.delete('/social/tracked/:instanceId/:jid', requireAuth, (req, res) => {
+        const { instanceId, jid } = req.params;
+        const inst = engineManager.getInstance(parseInt(instanceId));
+        if (inst && inst.socialManager) {
+            inst.socialManager.untrackContact(jid);
+            res.json({ success: true });
+        } else {
+            res.status(404).json({ error: "Instance not found" });
+        }
+    });
+
     router.post('/groups/:instanceId', requireAuth, async (req, res) => {
         const { instanceId } = req.params;
         const { title, participants } = req.body;

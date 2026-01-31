@@ -133,6 +133,16 @@ export function initDatabase() {
         )
     `).run();
 
+    db.prepare(`
+        CREATE TABLE IF NOT EXISTS tracked_contacts (
+            instance_id INTEGER,
+            jid TEXT,
+            last_online DATETIME,
+            today_duration INTEGER DEFAULT 0,
+            PRIMARY KEY (instance_id, jid)
+        )
+    `).run();
+
     // 2. MIGRATIONS (Ensure columns exist for legacy databases)
     const tables = ['chats', 'messages', 'instances'];
     

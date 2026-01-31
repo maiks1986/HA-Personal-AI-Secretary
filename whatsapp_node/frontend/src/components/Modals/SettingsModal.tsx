@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Settings, X, AlertTriangle, ShieldAlert, Clock, Plus, Trash2 } from 'lucide-react';
+import { Settings, X, AlertTriangle, ShieldAlert, Clock, Plus, Trash2, Activity, UserPlus } from 'lucide-react';
 import { api } from '../../api';
 
 interface SettingsModalProps {
@@ -36,12 +36,18 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   onReset 
 }) => {
   const [schedules, setSchedules] = useState<any[]>([]);
+  const [trackedContacts, setTrackedContacts] = useState<any[]>([]);
+  const [allContacts, setAllContacts] = useState<any[]>([]);
   const [isAddingStealth, setIsAddingStealth] = useState(false);
+  const [isAddingTracked, setIsAddingTracked] = useState(false);
   const [newSchedule, setNewStealth] = useState({ name: 'Stealth Mode', start_time: '18:00', end_time: '09:00', days: [1,2,3,4,5], mode: 'GLOBAL_NOBODY' });
+  const [selectedContactToTrack, setSelectedContactToTrack] = useState('');
 
   useEffect(() => {
     if (selectedInstanceId) {
         api.getStealthSchedules(selectedInstanceId).then(res => setSchedules(res.data));
+        api.getTrackedContacts(selectedInstanceId).then(res => setTrackedContacts(res.data));
+        api.getContacts(selectedInstanceId).then(res => setAllContacts(res.data));
     }
   }, [selectedInstanceId]);
 
@@ -55,6 +61,19 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   const handleDeleteStealth = async (id: number) => {
     await api.deleteStealthSchedule(id);
     if (selectedInstanceId) api.getStealthSchedules(selectedInstanceId).then(res => setSchedules(res.data));
+  };
+
+  const handleTrackContact = async () => {
+    if (!selectedInstanceId || !selectedContactToTrack) return;
+    await api.trackContact(selectedInstanceId, selectedContactToTrack);
+    setIsAddingTracked(false);
+    api.getTrackedContacts(selectedInstanceId).then(res => setTrackedContacts(res.data));
+  };
+
+  const handleUntrack = async (jid: string) => {
+    if (!selectedInstanceId) return;
+    await api.untrackContact(selectedInstanceId, jid);
+    api.getTrackedContacts(selectedInstanceId).then(res => setTrackedContacts(res.data));
   };
 
   return (
@@ -79,6 +98,44 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
               placeholder="Google AI Studio Key..." 
               className="w-full p-4 bg-white border-2 border-slate-100 rounded-2xl outline-none focus:border-teal-500 transition-all text-sm font-mono shadow-sm" 
             />
+          </div>
+
+          {/* Social Sensors */}
+          <div className="p-6 bg-blue-50 rounded-[2rem] border border-blue-100 relative overflow-hidden">
+            <div className="absolute top-0 right-0 p-4 opacity-10 text-blue-600"><Activity size={80} /></div>
+            <div className="relative z-10">
+                <div className="flex justify-between items-center mb-4">
+                    <h4 className="text-sm font-black uppercase tracking-widest flex items-center gap-2 text-blue-600"><Activity size={16} /> Social Sensors</h4>
+                    <button onClick={() => setIsAddingTracked(!isAddingTracked)} className="p-1 bg-blue-600 text-white rounded-lg hover:bg-blue-500 transition-all"><UserPlus size={16} /></button>
+                </div>
+
+                <div className="space-y-2 mb-4">
+                    {trackedContacts.map(t => (
+                        <div key={t.jid} className="bg-white p-3 rounded-xl flex justify-between items-center border border-blue-100 shadow-sm">
+                            <div>
+                                <div className="text-xs font-bold text-slate-700">{t.name || t.jid.split('@')[0]}</div>
+                                <div className="text-[8px] opacity-50 font-black uppercase tracking-widest">Today: {Math.floor(t.today_duration / 60)}m</div>
+                            </div>
+                            <button onClick={() => handleUntrack(t.jid)} className="text-slate-400 hover:text-red-400"><Trash2 size={14} /></button>
+                        </div>
+                    ))}
+                    {trackedContacts.length === 0 && <div className="text-center py-4 text-blue-300 text-[10px] font-bold uppercase">No tracked contacts</div>}
+                </div>
+
+                {isAddingTracked && (
+                    <div className="bg-white p-4 rounded-2xl space-y-4 border border-blue-200 animate-in slide-in-from-top-2">
+                        <select 
+                            value={selectedContactToTrack} 
+                            onChange={(e) => setSelectedContactToTrack(e.target.value)} 
+                            className="w-full bg-slate-50 p-3 rounded-xl text-xs border border-slate-200 outline-none"
+                        >
+                            <option value="">Select Contact...</option>
+                            {allContacts.map(c => <option key={c.jid} value={c.jid}>{c.name || c.jid}</option>)}
+                        </select>
+                        <button onClick={handleTrackContact} className="w-full bg-blue-600 text-white py-2 rounded-xl text-[10px] font-black uppercase">Track Presence</button>
+                    </div>
+                )}
+            </div>
           </div>
 
           {/* Stealth Mode Scheduler */}

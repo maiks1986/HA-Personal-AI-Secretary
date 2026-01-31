@@ -64,5 +64,10 @@ export const api = {
   // Stealth Scheduler
   getStealthSchedules: (instanceId: number) => axios.get(`api/stealth/schedules/${instanceId}`),
   createStealthSchedule: (data: any) => axios.post('api/stealth/schedules', data),
-  deleteStealthSchedule: (id: number) => axios.delete(`api/stealth/schedules/${id}`)
+  deleteStealthSchedule: (id: number) => axios.delete(`api/stealth/schedules/${id}`),
+
+  // Social Sensors
+  getTrackedContacts: (instanceId: number) => axios.get(`api/social/tracked/${instanceId}`),
+  trackContact: (instanceId: number, jid: string) => axios.post('api/social/tracked', { instanceId, jid }),
+  untrackContact: (instanceId: number, jid: string) => axios.delete(`api/social/tracked/${instanceId}/${jid}`)
 };
