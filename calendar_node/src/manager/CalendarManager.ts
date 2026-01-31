@@ -13,70 +13,64 @@ const logger = pino({
 });
 
 export class CalendarManager {
-  private authManager: GoogleAuthManager;
+  private authManagers: Map<string, GoogleAuthManager> = new Map();
   private db: CalendarDatabase;
 
-  constructor(authManager: GoogleAuthManager, db: CalendarDatabase) {
-    this.authManager = authManager;
+  constructor(db: CalendarDatabase) {
     this.db = db;
   }
 
-  public async listCalendars() {
-    const calendar = google.calendar({ version: 'v3', auth: this.authManager.getClient() });
-    const res = await calendar.calendarList.list();
-    return res.data.items || [];
+  public registerGoogleInstance(instanceId: string, auth: GoogleAuthManager) {
+    this.authManagers.set(instanceId, auth);
   }
 
-  public async syncEvents(calendarId: string = 'primary'): Promise<any[]> {
-    const calendar = google.calendar({ version: 'v3', auth: this.authManager.getClient() });
+  public async syncAll() {
+    const instances = this.db.getInstances();
+    for (const inst of instances) {
+      if (inst.type === 'google') {
+        await this.syncGoogleInstance(inst.id);
+      } else if (inst.type === 'ics') {
+        // TODO: Implement ICS Sync
+      }
+    }
+  }
+
+  private async syncGoogleInstance(instanceId: string) {
+    const auth = this.authManagers.get(instanceId);
+    if (!auth || !auth.isAuthorized()) return;
+
+    const calendar = google.calendar({ version: 'v3', auth: auth.getClient() });
     
-    logger.info(`Syncing events for calendar: ${calendarId}`);
-
-    const res = await calendar.events.list({
-      calendarId: calendarId,
-      timeMin: new Date().toISOString(),
-      maxResults: 100,
-      singleEvents: true,
-      orderBy: 'startTime',
-    });
-
-    const events = res.data.items || [];
-    for (const event of events) {
-      this.db.saveEvent(event, calendarId);
+    // 1. Sync Calendar List to update Roles
+    const calList = await calendar.calendarList.list();
+    for (const cal of calList.data.items || []) {
+       // We don't overwrite role if it already exists in DB
+       this.db.saveCalendar({
+         id: `${instanceId}_${cal.id}`,
+         instance_id: instanceId,
+         external_id: cal.id,
+         summary: cal.summary,
+         role: 'ignore', // Default
+         sync_token: null,
+         last_sync: new Date().toISOString()
+       });
     }
 
-    logger.info(`Synced ${events.length} events`);
-    return events;
+    // 2. Sync Events for non-ignored calendars
+    // ... logic to follow
   }
 
-  public async getAvailableSlots(start: string, end: string): Promise<CalendarEvent[]> {
-    // This will eventually use the Shadow DB for conflict resolution
-    // and complex logic as per the plan.
-    const rawEvents = this.db.getEvents(start, end);
-    
-    return rawEvents.map((row: any) => ({
-      id: row.id,
-      calendar_id: row.calendar_id,
-      summary: row.summary,
-      description: row.description,
-      start_time: row.start_time,
-      end_time: row.end_time,
-      location: row.location,
-      status: row.status,
-      // Add other fields as needed from JSON if necessary
-    }));
+  public async getAggregatedPresence() {
+    const presenceCalendars = this.db.getCalendarsByRole('presence');
+    // Combine events from all presence-mapped calendars to determine sensor state
   }
 
-  public async createEvent(eventDetails: any) {
-    const calendar = google.calendar({ version: 'v3', auth: this.authManager.getClient() });
-    const res = await calendar.events.insert({
-      calendarId: 'primary',
-      requestBody: eventDetails,
-    });
-    
-    // Save to shadow DB immediately
-    this.db.saveEvent(res.data, 'primary');
-    
-    return res.data;
+  // The "Adriana Shield" Logic
+  public async updateSocialSlots() {
+    const socialCals = this.db.getCalendarsByRole('social_slots');
+    if (socialCals.length === 0) return;
+
+    // 1. Gather all busy blocks from Primary/Private/Fixed
+    // 2. Sync to Social calendar as "Busy"
   }
 }

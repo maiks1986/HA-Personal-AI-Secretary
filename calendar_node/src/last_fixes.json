@@ -1,10 +1,10 @@
 {
-  "timestamp": "2026-01-31T11:00:00.000Z",
-  "description": "Bumped to v1.0.0.0002. Fixed a critical syntax error in the frontend package.json that was preventing the Docker build from succeeding.",
+  "timestamp": "2026-01-31T11:20:00.000Z",
+  "description": "v1.0.0.0003: Architectural Refactor. Implemented Multi-Instance support and Role-Based calendar mapping (Primary, Private, Social, Presence, Fixed, External). This enables the 'Adriana Shield' availability logic and 'Justin Presence' sensor logic in a generalized way.",
   "modules_affected": [
-    "calendar_node/frontend/package.json",
-    "calendar_node/config.yaml",
-    "calendar_node/package.json",
-    "calendar_node/src/last_fixes.json"
+    "calendar_node/src/db/CalendarDatabase.ts",
+    "calendar_node/src/manager/CalendarManager.ts",
+    "calendar_node/src/shared_schemas.ts",
+    "calendar_node/config.yaml"
   ]
 }

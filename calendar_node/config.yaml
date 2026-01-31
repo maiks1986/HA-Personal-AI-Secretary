@@ -1,5 +1,5 @@
 name: "Calendar Master"
-version: "1.0.0.0002"
+version: "1.0.0.0003"
 slug: "calendar_master"
 description: "Google Calendar Manager for Personal AI Secretary"
 arch:
