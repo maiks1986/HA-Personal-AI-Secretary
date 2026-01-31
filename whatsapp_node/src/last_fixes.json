@@ -1,8 +1,8 @@
 {
-  "timestamp": "2026-01-31T07:00:00.000Z",
-  "description": "Bumped version to 1.9.1.0046. Implemented aggressive identity merging: When a Phone-to-LID mapping is discovered, existing LID message history and chat stats are automatically moved to the Phone JID and the duplicate LID chat is deleted.",
+  "timestamp": "2026-01-31T08:00:00.000Z",
+  "description": "Bumped version to 1.9.1.0047. Enhanced Naming Worker to resolve 'numbered names' by cross-referencing message history for pushNames and performing background metadata lookups.",
   "modules_affected": [
-    "whatsapp_node/src/manager/modules/MessageManager.ts",
+    "whatsapp_node/src/manager/modules/WorkerManager.ts",
     "whatsapp_node/config.yaml",
     "whatsapp_node/package.json",
     "whatsapp_node/src/last_fixes.json"
