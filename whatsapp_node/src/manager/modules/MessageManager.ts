@@ -95,11 +95,38 @@ export class MessageManager {
         this.io.emit('chat_update', { instanceId: this.instanceId });
     }
 
+    private mergeIdentities(phoneJid: string, lid: string) {
+        const db = getDb();
+        try {
+            db.transaction(() => {
+                // Move messages from LID to Phone JID
+                db.prepare('UPDATE messages SET chat_jid = ? WHERE instance_id = ? AND chat_jid = ?').run(phoneJid, this.instanceId, lid);
+                
+                // Move/Merge chat stats
+                const lidChat = db.prepare('SELECT * FROM chats WHERE instance_id = ? AND jid = ?').get(this.instanceId, lid) as any;
+                if (lidChat) {
+                    db.prepare(`
+                        INSERT INTO chats (instance_id, jid, unread_count, last_message_text, last_message_timestamp)
+                        VALUES (?, ?, ?, ?, ?)
+                        ON CONFLICT(instance_id, jid) DO UPDATE SET
+                        unread_count = chats.unread_count + excluded.unread_count,
+                        last_message_timestamp = MAX(chats.last_message_timestamp, excluded.last_message_timestamp)
+                    `).run(this.instanceId, phoneJid, lidChat.unread_count, lidChat.last_message_text, lidChat.last_message_timestamp);
+                    
+                    // Delete the duplicate LID chat
+                    db.prepare('DELETE FROM chats WHERE instance_id = ? AND jid = ?').run(this.instanceId, lid);
+                }
+            })();
+            console.log(`[MessageManager]: Successfully merged identities ${lid} -> ${phoneJid}`);
+        } catch (e) {
+            console.error(`[MessageManager]: Failed to merge identities`, e);
+        }
+    }
+
     async handleContactsUpsert(contacts: Contact[]) {
         const db = getDb();
         console.log(`[Contacts Upsert ${this.instanceId}]: Received ${contacts.length} contacts`);
-        if (contacts.length > 0) console.log(`[Contacts Upsert] Sample:`, JSON.stringify(contacts[0]));
-
+        
         const contactJids: string[] = [];
         for (const contact of contacts) {
             contactJids.push(contact.id);
@@ -109,14 +136,17 @@ export class MessageManager {
             const normalized = normalizeJid(id);
             const name = contact.name || contact.notify || contact.verifiedName;
             
-            if (name) {
-                 db.prepare(`
-                    INSERT INTO contacts (instance_id, jid, name, lid) 
-                    VALUES (?, ?, ?, ?) 
-                    ON CONFLICT(instance_id, jid) DO UPDATE SET 
-                    name = excluded.name,
-                    lid = COALESCE(excluded.lid, contacts.lid)
-                `).run(this.instanceId, normalized, name, lid);
+            db.prepare(`
+                INSERT INTO contacts (instance_id, jid, name, lid) 
+                VALUES (?, ?, ?, ?) 
+                ON CONFLICT(instance_id, jid) DO UPDATE SET 
+                name = CASE WHEN excluded.name IS NOT NULL THEN excluded.name ELSE contacts.name END,
+                lid = COALESCE(excluded.lid, contacts.lid)
+            `).run(this.instanceId, normalized, name, lid);
+
+            // If we just learned a Phone -> LID mapping, trigger a merge
+            if (!normalized.endsWith('@lid') && lid && lid.endsWith('@lid')) {
+                this.mergeIdentities(normalized, lid);
             }
         }
         if (this.profilePicCallback) this.profilePicCallback(contactJids);
@@ -149,11 +179,13 @@ export class MessageManager {
     }
 
     private getCanonicalJid(jid: string): string {
-        if (!jid.endsWith('@lid')) return jid;
         const db = getDb();
-        // Try to find the Phone JID associated with this LID
-        const contact = db.prepare('SELECT jid FROM contacts WHERE instance_id = ? AND lid = ?').get(this.instanceId, jid) as any;
-        return contact?.jid || jid;
+        // 1. If it's a LID, try to find the associated Phone JID
+        if (jid.endsWith('@lid')) {
+            const row = db.prepare('SELECT jid FROM contacts WHERE instance_id = ? AND lid = ? AND jid NOT LIKE \'%@lid\'').get(this.instanceId, jid) as any;
+            if (row?.jid) return row.jid;
+        } 
+        return jid;
     }
 
     async saveMessageToDb(m: WAMessage) {
