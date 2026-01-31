@@ -1,40 +1,32 @@
 import React, { useState, useEffect } from 'react';
-import { Settings, X, AlertTriangle, ShieldAlert, Clock, Plus, Trash2, Activity, UserPlus } from 'lucide-react';
+import { Settings, X, ShieldAlert, Clock, Plus, Trash2, Activity, UserPlus, RefreshCw } from 'lucide-react';
 import { api } from '../../api';
 
 interface SettingsModalProps {
   onClose: () => void;
-  selectedInstanceId?: number;
-  geminiKey: string;
-  setGeminiKey: (k: string) => void;
-  autoNudge: boolean;
-  setAutoNudge: (n: boolean) => void;
-  syncDelay: number;
-  setSyncDelay: (d: number) => void;
-  ephemeralStart: string;
-  setEphemeralStart: (s: string) => void;
-  ephemeralStop: string;
-  setEphemeralStop: (s: string) => void;
-  onSave: () => void;
   onReset: () => void;
+  onRepair: () => void;
+  onSave: () => void;
+  wa: any;
 }
 
 export const SettingsModal: React.FC<SettingsModalProps> = ({ 
   onClose, 
-  selectedInstanceId,
-  geminiKey, 
-  setGeminiKey, 
-  autoNudge, 
-  setAutoNudge, 
-  syncDelay,
-  setSyncDelay,
-  ephemeralStart,
-  setEphemeralStart,
-  ephemeralStop,
-  setEphemeralStop,
+  onReset, 
+  onRepair,
   onSave, 
-  onReset 
+  wa 
 }) => {
+  const {
+    selectedInstance,
+    geminiKey, setGeminiKey,
+    autoNudge, setAutoNudge,
+    syncDelay, setSyncDelay,
+    ephemeralStartEmoji: ephemeralStart, setEphemeralStartEmoji: setEphemeralStart,
+    ephemeralStopEmoji: ephemeralStop, setEphemeralStopEmoji: setEphemeralStop
+  } = wa;
+
+  const selectedInstanceId = selectedInstance?.id;
   const [schedules, setSchedules] = useState<any[]>([]);
   const [trackedContacts, setTrackedContacts] = useState<any[]>([]);
   const [allContacts, setAllContacts] = useState<any[]>([]);
@@ -249,8 +241,17 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
           </div>
           
           <div className="pt-6 border-t border-slate-100 mt-6 text-center">
-            <button onClick={onReset} className="w-full bg-white text-red-500 border-2 border-red-100 p-4 rounded-2xl font-bold uppercase text-[10px] tracking-widest hover:bg-red-50 transition-all flex items-center justify-center gap-2">
-              <AlertTriangle size={16} /> Factory System Wipe
+            <button 
+              onClick={onReset} 
+              className="flex items-center gap-2 px-4 py-2 border border-red-200 text-red-600 rounded-lg text-xs font-black uppercase hover:bg-red-50 transition-all"
+            >
+              <Trash2 size={14} /> Full Wipe
+            </button>
+            <button 
+              onClick={onRepair} 
+              className="flex items-center gap-2 px-4 py-2 border border-teal-200 text-teal-600 rounded-lg text-xs font-black uppercase hover:bg-teal-50 transition-all"
+            >
+              <RefreshCw size={14} /> Repair & Re-sync
             </button>
           </div>
         </div>

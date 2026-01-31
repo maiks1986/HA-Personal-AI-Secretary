@@ -1,9 +1,11 @@
 {
-  "timestamp": "2026-01-31T11:00:00.000Z",
-  "description": "Bumped version to 1.9.1.0050. Optimized Profile Picture Manager: Increased processing speed, added LID-to-Phone JID resolution for avatar fetches, and implemented 24h update throttling. Refined group participant naming to prioritize pushName/chosen names over phone numbers when not in contacts.",
+  "timestamp": "2026-01-31T12:00:00.000Z",
+  "description": "Bumped version to 1.9.1.0051. Added 'Soft Repair' feature to clear local data (messages, chats, contacts, avatars) and force a fresh re-sync from WhatsApp servers without losing login sessions.",
   "modules_affected": [
-    "whatsapp_node/src/manager/modules/ProfilePictureManager.ts",
-    "whatsapp_node/src/manager/modules/MessageManager.ts",
+    "whatsapp_node/src/api/routes/system.ts",
+    "whatsapp_node/frontend/src/api/index.ts",
+    "whatsapp_node/frontend/src/App.tsx",
+    "whatsapp_node/frontend/src/components/Modals/SettingsModal.tsx",
     "whatsapp_node/config.yaml",
     "whatsapp_node/package.json",
     "whatsapp_node/src/last_fixes.json"

@@ -48,6 +48,32 @@ export const systemRouter = () => {
         res.json({ success: true });
     });
 
+    router.post('/system/repair', requireAuth, async (req, res) => {
+        const user = (req as any).haUser;
+        if (!user.isAdmin) return res.status(403).json({ error: "Admin only" });
+        
+        // 1. Wipe volatile data
+        db.prepare('DELETE FROM messages').run();
+        db.prepare('DELETE FROM chats').run();
+        db.prepare('DELETE FROM contacts').run();
+        db.prepare('DELETE FROM reactions').run();
+        db.prepare('DELETE FROM status_updates').run();
+        
+        // 2. Clear avatars
+        const avatarDir = process.env.NODE_ENV === 'development' ? './media/avatars' : '/data/media/avatars';
+        if (fs.existsSync(avatarDir)) {
+            const files = fs.readdirSync(avatarDir);
+            for (const file of files) fs.unlinkSync(path.join(avatarDir, file));
+        }
+
+        // 3. Force Re-sync for all instances
+        for (const inst of engineManager.getAllInstances()) {
+            inst.reconnect();
+        }
+        
+        res.json({ success: true });
+    });
+
     router.get('/debug/stats', requireAuth, (req, res) => {
         res.json({
             users: db.prepare('SELECT COUNT(*) as count FROM users').get(),

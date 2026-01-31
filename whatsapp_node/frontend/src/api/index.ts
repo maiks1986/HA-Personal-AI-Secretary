@@ -74,6 +74,7 @@ export const api = {
   getSetting: (key: string, instanceId: number = 0) => axios.get<{ value: string }>(`${BASE}/settings/${key}?instanceId=${instanceId}`),
   saveSetting: (key: string, value: string, instanceId: number = 0) => axios.post(`${BASE}/settings`, { key, value, instanceId }),
   resetSystem: () => axios.post(`${BASE}/system/reset`),
+  repairSystem: () => axios.post(`${BASE}/system/repair`),
 
   // Stealth Scheduler
   getStealthSchedules: (instanceId: number) => axios.get(`${BASE}/stealth/schedules/${instanceId}`),

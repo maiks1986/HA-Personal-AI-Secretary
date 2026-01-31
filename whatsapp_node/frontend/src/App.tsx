@@ -75,6 +75,15 @@ const App = () => {
     try { await api.deleteInstance(wa.selectedInstance.id); wa.setSelectedInstance(null); wa.fetchInstances(); } finally { setIsReseting(false); }
   };
 
+  const handleRepairSystem = async () => {
+    if (!confirm("This will clear all messages and chats locally and force a fresh re-sync from WhatsApp. Your login sessions will be kept. Proceed?")) return;
+    setIsReseting(true);
+    try {
+      await api.repairSystem();
+      window.location.reload();
+    } finally { setIsReseting(false); }
+  };
+
   const handleSearch = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!wa.selectedInstance || !searchQuery) return;
@@ -168,20 +177,11 @@ const App = () => {
       
       {isSettingsOpen && (
         <SettingsModal 
-          onClose={() => setIsSettingsOpen(false)}
-          selectedInstanceId={wa.selectedInstance?.id}
-          geminiKey={wa.geminiKey}
-          setGeminiKey={wa.setGeminiKey}
-          autoNudge={wa.autoNudge}
-          setAutoNudge={wa.setAutoNudge}
-          syncDelay={wa.syncDelay}
-          setSyncDelay={wa.setSyncDelay}
-          ephemeralStart={wa.ephemeralStartEmoji}
-          setEphemeralStart={wa.setEphemeralStartEmoji}
-          ephemeralStop={wa.ephemeralStopEmoji}
-          setEphemeralStop={wa.setEphemeralStopEmoji}
+          onClose={() => setIsSettingsOpen(false)} 
+          onReset={handleHardReset} 
+          onRepair={handleRepairSystem}
           onSave={handleSaveSettings}
-          onReset={() => api.resetSystem().then(() => window.location.reload())}
+          wa={wa}
         />
       )}
 
