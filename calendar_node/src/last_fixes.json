@@ -1,13 +1,10 @@
 {
-  "timestamp": "2026-01-31T10:45:00.000Z",
-  "description": "Initial release of Calendar Master v1.0.0.0001. Features: Google OAuth2 integration, Shadow DB for event caching, Zod-powered fullstack typesafety, and basic HA Add-on infrastructure.",
+  "timestamp": "2026-01-31T11:00:00.000Z",
+  "description": "Bumped to v1.0.0.0002. Fixed a critical syntax error in the frontend package.json that was preventing the Docker build from succeeding.",
   "modules_affected": [
-    "calendar_node/src/index.ts",
-    "calendar_node/src/shared_schemas.ts",
-    "calendar_node/src/manager/GoogleAuthManager.ts",
-    "calendar_node/src/manager/CalendarManager.ts",
-    "calendar_node/src/db/CalendarDatabase.ts",
+    "calendar_node/frontend/package.json",
     "calendar_node/config.yaml",
-    "calendar_node/package.json"
+    "calendar_node/package.json",
+    "calendar_node/src/last_fixes.json"
   ]
 }
