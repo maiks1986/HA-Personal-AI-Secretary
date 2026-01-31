@@ -1,8 +1,8 @@
 {
-  "timestamp": "2026-01-31T05:00:00.000Z",
-  "description": "Bumped version to 1.9.1.0044. Fixed fragmented message history by unifying Phone JID and LID message streams in the UI.",
+  "timestamp": "2026-01-31T06:00:00.000Z",
+  "description": "Bumped version to 1.9.1.0045. Security Cleanup: Removed temporary insecure raw_logs_dump endpoint after successful diagnostics.",
   "modules_affected": [
-    "whatsapp_node/src/api/routes/messaging.ts",
+    "whatsapp_node/src/api/routes/system.ts",
     "whatsapp_node/config.yaml",
     "whatsapp_node/package.json",
     "whatsapp_node/src/last_fixes.json"
