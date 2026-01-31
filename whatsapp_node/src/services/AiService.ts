@@ -28,7 +28,7 @@ class AiService {
         // 2. Fallback to Database if HA setting is empty
         if (!apiKey) {
             const db = getDb();
-            const row = db.prepare('SELECT value FROM settings WHERE key = ?').get('gemini_api_key') as any;
+            const row = db.prepare('SELECT value FROM settings WHERE instance_id = 0 AND key = ?').get('gemini_api_key') as any;
             apiKey = row?.value;
             if (apiKey) console.log('TRACE [AiService]: Loaded API Key from Database.');
         }

@@ -37,13 +37,15 @@ const App = () => {
   // 1. HOOKS MUST BE AT THE TOP
   useEffect(() => {
     if (auth.authState === 'authenticated') {
-      api.getSetting('gemini_api_key').then(res => wa.setGeminiKey(res.data.value));
-      api.getSetting('auto_nudge_enabled').then(res => wa.setAutoNudge(res.data.value !== 'false'));
-      api.getSetting('sync_delay_ms').then(res => res.data.value && wa.setSyncDelay(parseInt(res.data.value)));
-      api.getSetting('ephemeral_trigger_start').then(res => res.data.value && wa.setEphemeralStartEmoji(res.data.value));
-      api.getSetting('ephemeral_trigger_stop').then(res => res.data.value && wa.setEphemeralStopEmoji(res.data.value));
+      api.getSetting('gemini_api_key', 0).then(res => wa.setGeminiKey(res.data.value));
+      
+      const id = wa.selectedInstance?.id || 0;
+      api.getSetting('auto_nudge_enabled', id).then(res => wa.setAutoNudge(res.data.value !== 'false'));
+      api.getSetting('sync_delay_ms', id).then(res => res.data.value && wa.setSyncDelay(parseInt(res.data.value)));
+      api.getSetting('ephemeral_trigger_start', id).then(res => res.data.value && wa.setEphemeralStartEmoji(res.data.value));
+      api.getSetting('ephemeral_trigger_stop', id).then(res => res.data.value && wa.setEphemeralStopEmoji(res.data.value));
     }
-  }, [auth.authState]);
+  }, [auth.authState, wa.selectedInstance?.id]);
 
   // 2. EARLY RETURNS AFTER HOOKS
   if (auth.authState === 'loading') return <div className="h-screen w-full flex items-center justify-center bg-whatsapp-bg"><RefreshCw size={48} className="text-teal-600 spin" /></div>;
@@ -94,11 +96,12 @@ const App = () => {
   };
 
   const handleSaveSettings = async () => {
-    await api.saveSetting('gemini_api_key', wa.geminiKey);
-    await api.saveSetting('auto_nudge_enabled', wa.autoNudge.toString());
-    await api.saveSetting('sync_delay_ms', wa.syncDelay.toString());
-    await api.saveSetting('ephemeral_trigger_start', wa.ephemeralStartEmoji);
-    await api.saveSetting('ephemeral_trigger_stop', wa.ephemeralStopEmoji);
+    const id = wa.selectedInstance?.id || 0;
+    await api.saveSetting('gemini_api_key', wa.geminiKey, 0); // Always global
+    await api.saveSetting('auto_nudge_enabled', wa.autoNudge.toString(), id);
+    await api.saveSetting('sync_delay_ms', wa.syncDelay.toString(), id);
+    await api.saveSetting('ephemeral_trigger_start', wa.ephemeralStartEmoji, id);
+    await api.saveSetting('ephemeral_trigger_stop', wa.ephemeralStopEmoji, id);
     setIsSettingsOpen(false);
   };
 

@@ -96,12 +96,35 @@ export function initDatabase() {
         )
     `).run();
 
-    db.prepare(`
-        CREATE TABLE IF NOT EXISTS settings (
-            key TEXT PRIMARY KEY,
-            value TEXT
-        )
-    `).run();
+    // Settings Table Migration (Handle Legacy Global)
+    const settingsInfo = db.prepare("PRAGMA table_info(settings)").all() as any[];
+    if (!settingsInfo.find(c => c.name === 'instance_id')) {
+        console.log('MIGRATION: Upgrading settings table to support instances...');
+        db.transaction(() => {
+            db.prepare('ALTER TABLE settings RENAME TO settings_old').run();
+            db.prepare(`
+                CREATE TABLE settings (
+                    instance_id INTEGER DEFAULT 0,
+                    key TEXT,
+                    value TEXT,
+                    PRIMARY KEY (instance_id, key)
+                )
+            `).run();
+            // Migrate old settings as Global (ID 0)
+            db.prepare('INSERT INTO settings (instance_id, key, value) SELECT 0, key, value FROM settings_old').run();
+            db.prepare('DROP TABLE settings_old').run();
+        })();
+    } else {
+        // Ensure table exists if fresh install
+        db.prepare(`
+            CREATE TABLE IF NOT EXISTS settings (
+                instance_id INTEGER DEFAULT 0,
+                key TEXT,
+                value TEXT,
+                PRIMARY KEY (instance_id, key)
+            )
+        `).run();
+    }
 
     db.prepare(`
         CREATE TABLE IF NOT EXISTS sessions (

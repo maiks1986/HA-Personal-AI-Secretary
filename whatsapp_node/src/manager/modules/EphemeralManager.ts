@@ -52,8 +52,13 @@ export class EphemeralManager {
         const cleanText = text.trim();
 
         const db = getDb();
-        const startEmoji = (db.prepare('SELECT value FROM settings WHERE key = ?').get('ephemeral_trigger_start') as any)?.value || '👻';
-        const stopEmoji = (db.prepare('SELECT value FROM settings WHERE key = ?').get('ephemeral_trigger_stop') as any)?.value || '🛑';
+        const startEmoji = (db.prepare('SELECT value FROM settings WHERE instance_id = ? AND key = ?').get(this.instanceId, 'ephemeral_trigger_start') as any)?.value 
+            || (db.prepare('SELECT value FROM settings WHERE instance_id = 0 AND key = ?').get('ephemeral_trigger_start') as any)?.value 
+            || '👻';
+            
+        const stopEmoji = (db.prepare('SELECT value FROM settings WHERE instance_id = ? AND key = ?').get(this.instanceId, 'ephemeral_trigger_stop') as any)?.value 
+            || (db.prepare('SELECT value FROM settings WHERE instance_id = 0 AND key = ?').get('ephemeral_trigger_stop') as any)?.value 
+            || '🛑';
 
         if (cleanText === startEmoji) {
             await this.enableForChat(jid, 60); // Default 60 mins via emoji

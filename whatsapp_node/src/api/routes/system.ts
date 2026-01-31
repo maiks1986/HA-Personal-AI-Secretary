@@ -11,16 +11,25 @@ export const systemRouter = () => {
     const db = getDb();
 
     router.get('/settings/:key', requireAuth, (req, res) => {
-        const row = db.prepare('SELECT value FROM settings WHERE key = ?').get(req.params.key) as any;
+        const instanceId = parseInt(req.query.instanceId as string) || 0;
+        const row = db.prepare('SELECT value FROM settings WHERE instance_id = ? AND key = ?').get(instanceId, req.params.key) as any;
+        // Fallback to global if instance specific not found?
+        if (!row && instanceId !== 0) {
+             const globalRow = db.prepare('SELECT value FROM settings WHERE instance_id = 0 AND key = ?').get(req.params.key) as any;
+             return res.json({ value: globalRow?.value || "" });
+        }
         res.json({ value: row?.value || "" });
     });
 
     router.post('/settings', requireAuth, (req, res) => {
         const user = (req as any).haUser;
         if (!user.isAdmin) return res.status(403).json({ error: "Admin only" });
-        const { key, value } = req.body;
-        db.prepare('INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)').run(key, value);
-        if (key === 'gemini_api_key') aiService.reset();
+        
+        const { key, value, instanceId } = req.body;
+        const targetInstance = instanceId !== undefined ? instanceId : 0;
+        
+        db.prepare('INSERT OR REPLACE INTO settings (instance_id, key, value) VALUES (?, ?, ?)').run(targetInstance, key, value);
+        if (key === 'gemini_api_key' && targetInstance === 0) aiService.reset();
         res.json({ success: true });
     });
 

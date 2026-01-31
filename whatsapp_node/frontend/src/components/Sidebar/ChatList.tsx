@@ -1,5 +1,5 @@
 import React from 'react';
-import { Search, Users, RefreshCw, CircleDot, User, Pin } from 'lucide-react';
+import { Search, Users, RefreshCw, User, Pin } from 'lucide-react';
 import { Chat, Contact, Instance } from '../../types';
 
 interface ChatListProps {
@@ -27,7 +27,7 @@ export const ChatList: React.FC<ChatListProps> = ({
   setSearchQuery,
   onSearch,
   onOpenGroupModal,
-  handleTogglePresence,
+  // handleTogglePresence,
   handleReconnect,
   chats,
   contacts,
@@ -47,7 +47,7 @@ export const ChatList: React.FC<ChatListProps> = ({
             {activeTab === 'contacts' && <button onClick={onOpenGroupModal} className="p-1.5 bg-teal-50 text-teal-600 rounded-lg" title="New Group"><Users size={14} /></button>}
             {selectedInstance?.status === 'connected' && (
               <>
-                <button onClick={handleTogglePresence} className={`p-1.5 rounded-lg transition-all ${selectedInstance.presence === 'available' ? 'bg-green-100 text-green-600' : 'bg-slate-100 text-slate-400'}`} title="Online State"><CircleDot size={14} /></button>
+                {/* <button onClick={handleTogglePresence} className={`p-1.5 rounded-lg transition-all ${selectedInstance.presence === 'available' ? 'bg-green-100 text-green-600' : 'bg-slate-100 text-slate-400'}`} title="Online State"><CircleDot size={14} /></button> */}
                 <button onClick={handleReconnect} className="p-1.5 bg-teal-50 text-teal-600 rounded-lg hover:bg-teal-100 transition-all" title="Reconnect"><RefreshCw size={14} /></button>
               </>
             )}

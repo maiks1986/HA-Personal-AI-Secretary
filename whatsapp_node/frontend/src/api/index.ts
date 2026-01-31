@@ -57,8 +57,8 @@ export const api = {
   getStatuses: (instanceId: number) => axios.get<StatusUpdate[]>(`api/status/${instanceId}`),
 
   // Settings
-  getSetting: (key: string) => axios.get<{ value: string }>(`api/settings/${key}`),
-  saveSetting: (key: string, value: string) => axios.post('api/settings', { key, value }),
+  getSetting: (key: string, instanceId: number = 0) => axios.get<{ value: string }>(`api/settings/${key}?instanceId=${instanceId}`),
+  saveSetting: (key: string, value: string, instanceId: number = 0) => axios.post('api/settings', { key, value, instanceId }),
   resetSystem: () => axios.post('api/system/reset'),
 
   // Stealth Scheduler

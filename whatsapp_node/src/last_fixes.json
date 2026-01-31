@@ -1,9 +1,9 @@
 {
-  "timestamp": "2026-01-30T21:00:00.000Z",
-  "description": "Bumped version to 1.9.1.0036. Changed default presence to 'unavailable' (Offline) to prevent WhatsApp notification suppression on the primary phone. Added persistence for the Online/Offline toggle.",
+  "timestamp": "2026-01-30T22:00:00.000Z",
+  "description": "Bumped version to 1.9.1.0037. Implemented Online Timeout logic to automatically revert to 'Offline' after 60 seconds (configurable) when forced Online, preventing long-term notification suppression.",
   "modules_affected": [
     "whatsapp_node/src/manager/WhatsAppInstance.ts",
-    "whatsapp_node/src/manager/EngineManager.ts",
+    "whatsapp_node/frontend/src/components/Sidebar/ChatList.tsx",
     "whatsapp_node/config.yaml",
     "whatsapp_node/package.json",
     "whatsapp_node/src/last_fixes.json"
