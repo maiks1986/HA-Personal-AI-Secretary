@@ -37,6 +37,7 @@ yarn-error.log*
 
 # Documentation
 workflow/
+plans/
 whatsapp_node/workflow/
 calendar_node/workflow/
 read_workflow.bat
