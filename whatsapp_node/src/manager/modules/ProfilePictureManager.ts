@@ -26,8 +26,8 @@ export class ProfilePictureManager {
 
     public start() {
         if (this.interval) return;
-        // Process 1 item every 3 seconds to be safe
-        this.interval = setInterval(() => this.processNext(), 3000);
+        // Process 1 item every 2 seconds
+        this.interval = setInterval(() => this.processNext(), 2000);
         console.log(`[ProfilePictureManager ${this.instanceId}]: Started worker.`);
     }
 
@@ -37,9 +37,19 @@ export class ProfilePictureManager {
     }
 
     public enqueue(jids: string[]) {
+        const db = getDb();
+        const now = Date.now();
+        const oneDayAgo = new Date(now - 24 * 60 * 60 * 1000).toISOString();
+
         for (const jid of jids) {
             if (jid.includes('@broadcast') || jid === 'status@broadcast') continue;
-            this.queue.add(normalizeJid(jid));
+            const normalized = normalizeJid(jid);
+
+            // Skip if updated in the last 24h
+            const row = db.prepare('SELECT profile_picture_timestamp FROM contacts WHERE instance_id = ? AND jid = ?').get(this.instanceId, normalized) as any;
+            if (row?.profile_picture_timestamp && row.profile_picture_timestamp > oneDayAgo) continue;
+
+            this.queue.add(normalized);
         }
         if (!this.interval) this.start();
     }
@@ -48,51 +58,48 @@ export class ProfilePictureManager {
         if (this.processing || this.queue.size === 0) return;
         this.processing = true;
 
-        const jid = this.queue.values().next().value;
-        if (!jid) {
+        const rawJid = this.queue.values().next().value;
+        if (!rawJid) {
             this.processing = false;
             return;
         }
-        this.queue.delete(jid);
+        this.queue.delete(rawJid);
 
         try {
-            // Check if we recently updated this (e.g. < 24h)
-            // Skip check for now to force initial sync, logic can be added later
-            
-            // console.log(`[ProfilePictureManager]: Fetching for ${jid}`);
-            const url = await this.sock.profilePictureUrl(jid, 'image'); // 'image' = high res
+            const db = getDb();
+            // Canonicalize JID for the API call (LIDs usually don't work for avatars)
+            let jid = rawJid;
+            if (rawJid.endsWith('@lid')) {
+                const row = db.prepare('SELECT jid FROM contacts WHERE instance_id = ? AND lid = ? AND jid NOT LIKE \'%@lid\'').get(this.instanceId, rawJid) as any;
+                if (row?.jid) jid = row.jid;
+            }
+
+            const url = await this.sock.profilePictureUrl(jid, 'image'); 
             
             if (url) {
                 const response = await axios.get(url, { responseType: 'arraybuffer' });
-                const fileName = `${jid.replace(/[^a-zA-Z0-9]/g, '_')}.jpg`; // Safe filename
+                const fileName = `${jid.replace(/[^a-zA-Z0-9]/g, '_')}.jpg`;
                 const filePath = path.join(this.avatarDir, fileName);
                 
                 fs.writeFileSync(filePath, response.data);
                 
-                const db = getDb();
                 const now = new Date().toISOString();
                 const relativePath = `avatars/${fileName}`;
 
-                // Update both tables just in case
-                db.prepare('UPDATE contacts SET profile_picture = ?, profile_picture_timestamp = ? WHERE instance_id = ? AND jid = ?')
-                    .run(relativePath, now, this.instanceId, jid);
+                db.prepare('UPDATE contacts SET profile_picture = ?, profile_picture_timestamp = ? WHERE instance_id = ? AND jid = ?').run(relativePath, now, this.instanceId, rawJid);
+                if (jid !== rawJid) db.prepare('UPDATE contacts SET profile_picture = ?, profile_picture_timestamp = ? WHERE instance_id = ? AND jid = ?').run(relativePath, now, this.instanceId, jid);
                 
-                db.prepare('UPDATE chats SET profile_picture = ?, profile_picture_timestamp = ? WHERE instance_id = ? AND jid = ?')
-                    .run(relativePath, now, this.instanceId, jid);
+                db.prepare('UPDATE chats SET profile_picture = ?, profile_picture_timestamp = ? WHERE instance_id = ? AND jid = ?').run(relativePath, now, this.instanceId, rawJid);
+                if (jid !== rawJid) db.prepare('UPDATE chats SET profile_picture = ?, profile_picture_timestamp = ? WHERE instance_id = ? AND jid = ?').run(relativePath, now, this.instanceId, jid);
+            } else {
+                // No URL = Privacy restricted or no pic
+                const now = new Date().toISOString();
+                db.prepare('UPDATE contacts SET profile_picture_timestamp = ? WHERE instance_id = ? AND jid = ?').run(now, this.instanceId, rawJid);
             }
         } catch (e: any) {
-            // 401/404/400 means no profile pic or privacy restricted
-            // Mark as 'none' to avoid re-fetching constantly? Or just update timestamp
             const db = getDb();
             const now = new Date().toISOString();
-            // Only update timestamp to skip it next time, don't clear existing pic if temporary error
-            // But if it's 404/401/410, it's gone/private
-            if (e?.data === 401 || e?.data === 404 || e?.data === 410 || (e?.message && e.message.includes('not-authorized'))) {
-                 db.prepare('UPDATE contacts SET profile_picture = NULL, profile_picture_timestamp = ? WHERE instance_id = ? AND jid = ?')
-                    .run(now, this.instanceId, jid);
-                 db.prepare('UPDATE chats SET profile_picture = NULL, profile_picture_timestamp = ? WHERE instance_id = ? AND jid = ?')
-                    .run(now, this.instanceId, jid);
-            }
+            db.prepare('UPDATE contacts SET profile_picture_timestamp = ? WHERE instance_id = ? AND jid = ?').run(now, this.instanceId, rawJid);
         } finally {
             this.processing = false;
         }

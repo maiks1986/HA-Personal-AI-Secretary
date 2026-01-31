@@ -231,7 +231,17 @@ export class MessageManager {
                     senderName = contactName;
                 }
             }
-            if (!senderName) senderName = isGroup ? sender_jid.split('@')[0] : "Unknown";
+
+            // LAST RESORT FALLBACKS:
+            if (!senderName || senderName === 'Unknown') {
+                // Use chosen name from message if available
+                if (m.pushName && m.pushName !== 'Unknown') {
+                    senderName = m.pushName;
+                } else {
+                    // Use phone number
+                    senderName = sender_jid.split('@')[0];
+                }
+            }
 
             // IDENTITY RESOLUTION: The Chat identity should always be the contact name (1-on-1) or group subject.
             let chatIdentityName = this.resolveNameFromContacts(jid);

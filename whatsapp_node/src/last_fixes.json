@@ -1,7 +1,8 @@
 {
-  "timestamp": "2026-01-31T10:00:00.000Z",
-  "description": "Bumped version to 1.9.1.0049. Fixed Group Message and Status attribution by checking for participants at both the key and message levels. Enabled identity canonicalization for senders to ensure LID participants map to their Phone Names.",
+  "timestamp": "2026-01-31T11:00:00.000Z",
+  "description": "Bumped version to 1.9.1.0050. Optimized Profile Picture Manager: Increased processing speed, added LID-to-Phone JID resolution for avatar fetches, and implemented 24h update throttling. Refined group participant naming to prioritize pushName/chosen names over phone numbers when not in contacts.",
   "modules_affected": [
+    "whatsapp_node/src/manager/modules/ProfilePictureManager.ts",
     "whatsapp_node/src/manager/modules/MessageManager.ts",
     "whatsapp_node/config.yaml",
     "whatsapp_node/package.json",
