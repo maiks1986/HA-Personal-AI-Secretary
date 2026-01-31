@@ -1,7 +1,8 @@
 {
-  "timestamp": "2026-01-31T08:00:00.000Z",
-  "description": "Bumped version to 1.9.1.0047. Enhanced Naming Worker to resolve 'numbered names' by cross-referencing message history for pushNames and performing background metadata lookups.",
+  "timestamp": "2026-01-31T09:00:00.000Z",
+  "description": "Bumped version to 1.9.1.0048. Fixed Group Message attribution: Ensured participant names are correctly resolved and not overwritten by the group name. Added background cleanup to repair incorrect sender names in existing group messages.",
   "modules_affected": [
+    "whatsapp_node/src/manager/modules/MessageManager.ts",
     "whatsapp_node/src/manager/modules/WorkerManager.ts",
     "whatsapp_node/config.yaml",
     "whatsapp_node/package.json",

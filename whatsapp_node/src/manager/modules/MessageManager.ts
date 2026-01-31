@@ -200,10 +200,18 @@ export class MessageManager {
             const timestamp = new Date(Number(m.messageTimestamp) * 1000).toISOString();
             const is_from_me = m.key.fromMe ? 1 : 0;
             const sender_jid = m.key.participant ? normalizeJid(m.key.participant) : rawJid;
+            const isGroup = rawJid.endsWith('@g.us');
 
             // SENDER NAME RESOLUTION & AUTO-LEARN
             let senderName = m.pushName;
-            if (senderName && senderName !== 'Unknown') {
+
+            // If it's a group and sender_jid is the group itself (participant missing), 
+            // we should not use the group name as the sender name.
+            if (isGroup && sender_jid === rawJid) {
+                senderName = "System";
+            }
+
+            if (senderName && senderName !== 'Unknown' && senderName !== 'System') {
                 // If we got a name from the message, make sure it's in our contacts list for this JID
                 db.prepare(`
                     INSERT INTO contacts (instance_id, jid, name) VALUES (?, ?, ?)
@@ -213,11 +221,12 @@ export class MessageManager {
 
             if (!senderName || senderName === 'Unknown') {
                 const contactName = this.resolveNameFromContacts(sender_jid);
+                // Ensure we don't use the group name as the participant name
                 if (contactName && contactName !== sender_jid.split('@')[0]) {
                     senderName = contactName;
                 }
             }
-            if (!senderName) senderName = "Unknown";
+            if (!senderName) senderName = isGroup ? sender_jid.split('@')[0] : "Unknown";
 
             // IDENTITY RESOLUTION: The Chat identity should always be the contact name (1-on-1) or group subject.
             let chatIdentityName = this.resolveNameFromContacts(jid);

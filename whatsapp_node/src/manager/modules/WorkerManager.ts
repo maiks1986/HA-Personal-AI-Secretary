@@ -82,6 +82,23 @@ export class WorkerManager {
                     } catch (e) {}
                 }
             }
+
+            // 2. Fix group messages where sender_name is the group JID or group name
+            const wrongGroupSenders = db.prepare(`
+                SELECT m.whatsapp_id, m.sender_jid, c.name as correct_name
+                FROM messages m
+                JOIN contacts c ON m.sender_jid = c.jid AND m.instance_id = c.instance_id
+                WHERE m.instance_id = ? 
+                AND m.chat_jid LIKE '%@g.us'
+                AND (m.sender_name LIKE '%@g.us' OR m.sender_name = 'Unknown' OR m.sender_name GLOB '[0-9]*')
+                AND c.name NOT LIKE '%@%'
+                LIMIT 100
+            `).all(this.instanceId) as any[];
+
+            for (const row of wrongGroupSenders) {
+                db.prepare('UPDATE messages SET sender_name = ? WHERE whatsapp_id = ?').run(row.correct_name, row.whatsapp_id);
+            }
+
         }, 60000); // Check every 60s
     }
 
