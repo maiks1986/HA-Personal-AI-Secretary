@@ -9,32 +9,39 @@ class AiService {
     private async getClient() {
         if (this.genAI) return this.genAI;
         
-        // 1. Try reading from HA Options first
         let apiKey: string | null = null;
+
+        // 1. Try Database (Runtime Override)
         try {
-            const OPTIONS_PATH = process.env.NODE_ENV === 'development' 
-                ? path.join(__dirname, '../../options.json') 
-                : '/data/options.json';
-
-            if (fs.existsSync(OPTIONS_PATH)) {
-                const config = JSON.parse(fs.readFileSync(OPTIONS_PATH, 'utf8'));
-                apiKey = config.gemini_api_key;
-                if (apiKey) console.log('TRACE [AiService]: Loaded API Key from Add-on options.');
-            }
-        } catch (e) {
-            console.error('TRACE [AiService]: Error reading options.json:', e);
-        }
-
-        // 2. Fallback to Database if HA setting is empty
-        if (!apiKey) {
             const db = getDb();
             const row = db.prepare('SELECT value FROM settings WHERE instance_id = 0 AND key = ?').get('gemini_api_key') as any;
-            apiKey = row?.value;
-            if (apiKey) console.log('TRACE [AiService]: Loaded API Key from Database.');
+            if (row?.value) {
+                apiKey = row.value;
+                console.log('TRACE [AiService]: Loaded API Key from Database (Runtime Override).');
+            }
+        } catch (e) {}
+
+        // 2. Fallback to HA Options
+        if (!apiKey) {
+            try {
+                const OPTIONS_PATH = process.env.NODE_ENV === 'development' 
+                    ? path.join(__dirname, '../../options.json') 
+                    : '/data/options.json';
+
+                if (fs.existsSync(OPTIONS_PATH)) {
+                    const config = JSON.parse(fs.readFileSync(OPTIONS_PATH, 'utf8'));
+                    if (config.gemini_api_key) {
+                        apiKey = config.gemini_api_key;
+                        console.log('TRACE [AiService]: Loaded API Key from Add-on options.');
+                    }
+                }
+            } catch (e) {
+                console.error('TRACE [AiService]: Error reading options.json:', e);
+            }
         }
 
         if (!apiKey) {
-            console.warn("TRACE [AiService]: No Gemini API Key found in Add-on settings or database.");
+            console.warn("TRACE [AiService]: No Gemini API Key found in Database or Add-on settings.");
             return null;
         }
         
