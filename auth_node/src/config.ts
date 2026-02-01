@@ -37,15 +37,12 @@ export function loadConfig(): Config {
   if (process.env.JWT_SECRET) config.jwtSecret = process.env.JWT_SECRET;
   
   // Ensure data dir exists
-  const absoluteDataDir = path.resolve(config.dataDir);
-  console.log(`Configured Data Directory: ${config.dataDir} (Absolute: ${absoluteDataDir})`);
-  
-  if (!fs.existsSync(absoluteDataDir)) {
-      console.log(`Creating data directory: ${absoluteDataDir}`);
+  if (!fs.existsSync(config.dataDir)) {
+      console.log(`Creating data directory: ${config.dataDir}`);
       try {
-          fs.mkdirSync(absoluteDataDir, { recursive: true });
+          fs.mkdirSync(config.dataDir, { recursive: true });
       } catch (e) {
-          console.error(`Failed to create data directory ${absoluteDataDir}:`, e);
+          console.error(`Failed to create data directory ${config.dataDir}:`, e);
       }
   }
 

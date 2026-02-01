@@ -15,15 +15,13 @@ app.use(cookieParser());
 // API Routes
 app.use('/api', apiRoutes);
 
-// Serve Frontend (Placeholder for now)
+// Serve Frontend
 app.use(express.static(path.join(__dirname, '../frontend/dist')));
 app.get('*', (req, res) => {
     // If not an API call, serve index.html
     if (!req.path.startsWith('/api')) {
          const index = path.join(__dirname, '../frontend/dist/index.html');
-         // Check if file exists to avoid crash
-         // res.sendFile(index);
-         res.send('Frontend not built yet. API is running on /api');
+         res.sendFile(index);
     }
 });
 
