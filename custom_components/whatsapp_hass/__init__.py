@@ -1,9 +1,11 @@
 """The Ultimate WhatsApp Home Assistant Bridge."""
 import logging
 import aiohttp
+from datetime import timedelta
 from homeassistant.core import HomeAssistant, ServiceCall
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.components.http import HomeAssistantView
+from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 from homeassistant.helpers import config_validation as cv, device_registry as dr
 from .const import DOMAIN
 
@@ -20,12 +22,35 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry):
     api_key = entry.data.get("api_key", "")
     
     engine_url = f"http://{host}:{port}"
-    
     session = aiohttp.ClientSession()
+
+    async def async_update_data():
+        """Fetch data from Node Engine."""
+        headers = {"x-api-key": api_key}
+        try:
+            async with session.get(f"{engine_url}/api/instances", headers=headers, timeout=5) as response:
+                if response.status != 200:
+                    raise UpdateFailed(f"Error {response.status}")
+                return await response.json()
+        except Exception as err:
+            raise UpdateFailed(f"Error communicating with engine: {err}")
+
+    coordinator = DataUpdateCoordinator(
+        hass,
+        _LOGGER,
+        name="whatsapp_instances",
+        update_method=async_update_data,
+        update_interval=timedelta(seconds=10),
+    )
+
+    # Initial refresh
+    await coordinator.async_config_entry_first_refresh()
+    
     hass.data[DOMAIN][entry.entry_id] = {
         "engine_url": engine_url,
         "api_key": api_key,
-        "session": session
+        "session": session,
+        "coordinator": coordinator
     }
 
     # Register Panel
@@ -77,8 +102,31 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry):
             "message": message
         })
 
+    async def handle_modify_chat(call: ServiceCall):
+        """Modify a chat (pin, archive, delete)."""
+        jid = call.data.get("jid")
+        action = call.data.get("action")
+        instance_id = call.data.get("instance_id", 1)
+        await engine_api_call("POST", f"/api/chats/{instance_id}/{jid}/modify", {"action": action})
+
+    async def handle_set_presence(call: ServiceCall):
+        """Set account presence."""
+        presence = call.data.get("presence")
+        instance_id = call.data.get("instance_id", 1)
+        await engine_api_call("POST", f"/api/instances/{instance_id}/presence", {"presence": presence})
+
+    async def handle_create_group(call: ServiceCall):
+        """Create a new group."""
+        title = call.data.get("title")
+        participants = call.data.get("participants", [])
+        instance_id = call.data.get("instance_id", 1)
+        await engine_api_call("POST", f"/api/groups/{instance_id}", {"title": title, "participants": participants})
+
     # Register Services
     hass.services.async_register(DOMAIN, "send_message", handle_send_message)
+    hass.services.async_register(DOMAIN, "modify_chat", handle_modify_chat)
+    hass.services.async_register(DOMAIN, "set_presence", handle_set_presence)
+    hass.services.async_register(DOMAIN, "create_group", handle_create_group)
 
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
     return True

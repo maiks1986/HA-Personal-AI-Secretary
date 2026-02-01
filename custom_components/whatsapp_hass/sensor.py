@@ -12,28 +12,7 @@ _LOGGER = logging.getLogger(__name__)
 async def async_setup_entry(hass: HomeAssistant, entry, async_add_entities):
     """Set up the sensor platform."""
     data = hass.data[DOMAIN][entry.entry_id]
-    engine_url = data["engine_url"]
-    session = data["session"]
-
-    async def async_update_data():
-        """Fetch data from Node Engine."""
-        try:
-            async with session.get(f"{engine_url}/api/instances", timeout=5) as response:
-                if response.status != 200:
-                    raise UpdateFailed(f"Error {response.status}")
-                return await response.json()
-        except Exception as err:
-            raise UpdateFailed(f"Error communicating with engine: {err}")
-
-    coordinator = DataUpdateCoordinator(
-        hass,
-        _LOGGER,
-        name="whatsapp_instances",
-        update_method=async_update_data,
-        update_interval=timedelta(seconds=10),
-    )
-
-    await coordinator.async_config_entry_first_refresh()
+    coordinator = data["coordinator"]
 
     entities = []
     for instance in coordinator.data:
