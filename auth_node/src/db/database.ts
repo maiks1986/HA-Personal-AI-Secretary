@@ -25,9 +25,19 @@ export class AuthDatabase {
                 password_hash TEXT NOT NULL,
                 role TEXT NOT NULL DEFAULT 'user',
                 created_at INTEGER NOT NULL,
-                last_login INTEGER
+                last_login INTEGER,
+                totp_secret TEXT,
+                is_totp_enabled INTEGER DEFAULT 0
             )
         `);
+        
+        // Migration for existing tables (Idempotent)
+        try {
+            this.db.exec("ALTER TABLE users ADD COLUMN totp_secret TEXT");
+        } catch (e) {}
+        try {
+            this.db.exec("ALTER TABLE users ADD COLUMN is_totp_enabled INTEGER DEFAULT 0");
+        } catch (e) {}
 
         // Check if admin exists, if not create default
         const admin = this.getUserByUsername('admin');
@@ -39,7 +49,7 @@ export class AuthDatabase {
         }
     }
 
-    getUserByUsername(username: string): (User & { password_hash: string }) | undefined {
+    getUserByUsername(username: string): (User & { password_hash: string, totp_secret?: string }) | undefined {
         const stmt = this.db.prepare('SELECT * FROM users WHERE username = ?');
         const user = stmt.get(username) as any;
         if (!user) return undefined;
@@ -64,6 +74,16 @@ export class AuthDatabase {
             role,
             created_at: createdAt
         };
+    }
+
+    updateTotpSecret(userId: string, secret: string) {
+        const stmt = this.db.prepare('UPDATE users SET totp_secret = ? WHERE id = ?');
+        stmt.run(secret, userId);
+    }
+
+    enableTotp(userId: string) {
+        const stmt = this.db.prepare('UPDATE users SET is_totp_enabled = 1 WHERE id = ?');
+        stmt.run(userId);
     }
 }
 
