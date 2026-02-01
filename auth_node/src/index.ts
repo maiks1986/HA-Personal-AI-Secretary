@@ -12,6 +12,12 @@ app.use(cors());
 app.use(express.json());
 app.use(cookieParser());
 
+// Request Logger
+app.use((req, res, next) => {
+    console.log(`[${new Date().toISOString()}] ${req.method} ${req.path}`);
+    next();
+});
+
 // API Routes
 app.use('/api', apiRoutes);
 
