@@ -147,8 +147,13 @@ router.post('/2fa/verify', ensureAuth, (req, res) => {
         encoding: 'base32',
         token: token
     });
-}, {
-    res, : .status(400).json({ success: false, error: "Invalid code" })
+    if (verified) {
+        database_1.db.enableTotp(user.sub);
+        res.json({ success: true });
+    }
+    else {
+        res.status(400).json({ success: false, error: "Invalid code" });
+    }
 });
 // --- Admin User Management ---
 router.get('/users', ensureAdmin, (req, res) => {

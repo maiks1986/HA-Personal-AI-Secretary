@@ -175,6 +175,9 @@ router.post('/2fa/verify', ensureAuth, (req: Request, res: Response) => {
         token: token
     });
 
+    if (verified) {
+        (db as any).enableTotp(user.sub);
+        res.json({ success: true });
     } else {
         res.status(400).json({ success: false, error: "Invalid code" });
     }

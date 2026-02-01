@@ -1,4 +1,4 @@
 {
-  "timestamp": "2026-02-01T15:50:00Z",
-  "description": "Bumped version to 1.0.0.0009. Verified and solidified dynamic API URL calculation to ensure reliable routing through Home Assistant Ingress."
+  "timestamp": "2026-02-01T17:25:00Z",
+  "description": "Fixed syntax error in auth.ts and finalized User Management Dashboard. Bumped version to 1.0.0.0011."
 }
