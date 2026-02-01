@@ -7,6 +7,8 @@ import { loadConfig } from './utils';
 import { GoogleAuthManager } from './manager/GoogleAuthManager';
 import { CalendarDatabase } from './db/CalendarDatabase';
 import { CalendarManager } from './manager/CalendarManager';
+import { GlobalAuthService } from './services/GlobalAuthService';
+import { authMiddleware } from './middleware/auth';
 import { 
   HealthResponse, 
   AuthUrlResponse, 
@@ -56,8 +58,12 @@ try {
   logger.warn('Could not load last_fixes.json');
 }
 
+// Initialize Global Auth
+GlobalAuthService.init();
+
 app.use(cors());
 app.use(express.json());
+app.use(authMiddleware);
 
 // Initialize Auth
 authManager.loadTokens().then(loaded => {
