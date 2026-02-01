@@ -50,6 +50,8 @@ const getAddonConfig = () => {
     return { password: "" };
 };
 
+import { GlobalAuthService } from './services/GlobalAuthService';
+
 async function bootstrap() {
     console.log('--- STARTING BOOTSTRAP ---');
     try {
@@ -61,6 +63,9 @@ async function bootstrap() {
     } catch (e) {
         console.log('Build version info not found.');
     }
+
+    // Initialize Global Auth (Fetch Keys)
+    await GlobalAuthService.init();
 
     await new Promise(r => setTimeout(r, 5000));
 

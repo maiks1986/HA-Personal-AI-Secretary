@@ -2,6 +2,7 @@ import { Request, Response, NextFunction } from 'express';
 import { AuthUser } from '../types';
 import { getDb } from '../db/database';
 import fs from 'fs';
+import { GlobalAuthService } from '../services/GlobalAuthService';
 
 const getOptions = () => {
     try {
@@ -56,6 +57,14 @@ export const identityResolver = (req: Request, res: Response, next: NextFunction
     const token = cookieToken || authHeader?.split(' ')[1];
 
     if (token) {
+        // A. Check Global Auth (JWT)
+        const globalUser = GlobalAuthService.verifyToken(token);
+        if (globalUser) {
+            (req as any).haUser = globalUser;
+            return next();
+        }
+
+        // B. Check Local DB
         try {
             const db = getDb();
             const session = db.prepare('SELECT * FROM sessions WHERE token = ?').get(token) as any;
