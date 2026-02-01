@@ -1,4 +1,4 @@
 {
-  "timestamp": "2026-02-01T18:10:00Z",
-  "description": "Improved OAuth setup visibility in UI by adding a setup guide and configuration status indicator. Bumped version to 0.0.1.0012."
+  "timestamp": "2026-02-01T18:30:00Z",
+  "description": "Verified all UI elements and bumped version to 0.0.1.0013 to ensure Home Assistant triggers a fresh update."
 }

@@ -1,6 +1,6 @@
 {
   "name": "ai-gateway",
-  "version": "0.0.1.0012",
+  "version": "0.0.1.0013",
   "description": "Centralized Intelligence & Routing for Home Assistant Add-ons",
   "main": "dist/index.js",
   "scripts": {
