@@ -1,4 +1,4 @@
 {
-  "timestamp": "2026-02-01T15:35:00Z",
-  "description": "Implemented dynamic API URL calculation in App.tsx to ensure reliable routing through Home Assistant Ingress, avoiding double slashes. Bumped version to 1.0.0.0008."
+  "timestamp": "2026-02-01T15:50:00Z",
+  "description": "Bumped version to 1.0.0.0009. Verified and solidified dynamic API URL calculation to ensure reliable routing through Home Assistant Ingress."
 }
