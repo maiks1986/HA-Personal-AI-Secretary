@@ -1,0 +1,9 @@
+{
+  "timestamp": "2026-02-01T13:40:00.000Z",
+  "description": "v1.0.0.0010: Changed default port to 5003 to resolve conflict with WhatsApp Node Engine (which uses 5002). Updated config.yaml and src/index.ts.",
+  "modules_affected": [
+    "calendar_node/config.yaml",
+    "calendar_node/src/index.ts",
+    "calendar_node/package.json"
+  ]
+}
