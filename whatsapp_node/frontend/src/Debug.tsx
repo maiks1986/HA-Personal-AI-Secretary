@@ -39,7 +39,8 @@ const Debug = ({ onClose }: { onClose: () => void }) => {
                 id: Math.random(),
                 timestamp: new Date(log.timestamp).toLocaleTimeString(),
                 instanceId: log.instanceId,
-                payload: log.events
+                type: log.type,
+                payload: log.payload
             })));
         } catch (e) { alert("Failed to fetch logs"); } finally { setIsLoading(false); }
     };
@@ -78,7 +79,8 @@ const Debug = ({ onClose }: { onClose: () => void }) => {
                 id: Date.now() + Math.random(),
                 timestamp: new Date(data.timestamp || Date.now()).toLocaleTimeString(),
                 instanceId: data.instanceId,
-                payload: data.events
+                type: data.type,
+                payload: data.payload
             }]);
         });
         return () => { socket.off('raw_whatsapp_event'); };
@@ -137,8 +139,10 @@ const Debug = ({ onClose }: { onClose: () => void }) => {
                         {events.map(ev => (
                             <div key={ev.id} className="bg-slate-900/50 border border-slate-800 rounded-lg p-3">
                                 <div className="flex justify-between items-center mb-2 border-b border-slate-800 pb-1">
-                                    <span className="text-teal-500 font-bold">[{ev.timestamp}] Instance {ev.instanceId}</span>
-                                    <span className="text-slate-600 text-[9px] uppercase font-black">{Object.keys(ev.payload || {}).join(', ')}</span>
+                                    <span className="text-teal-500 font-bold">[{ev.timestamp}] Instance {ev.instanceId} &bull; <span className="text-amber-400">{ev.type}</span></span>
+                                    <span className="text-slate-600 text-[9px] uppercase font-black">
+                                        {Array.isArray(ev.payload) ? `Array[${ev.payload.length}]` : Object.keys(ev.payload || {}).join(', ')}
+                                    </span>
                                 </div>
                                 <pre className="text-slate-400 whitespace-pre-wrap break-all">{JSON.stringify(ev.payload, null, 2)}</pre>
                             </div>

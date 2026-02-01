@@ -1,8 +1,7 @@
 {
-  "timestamp": "2026-02-01T11:00:00.000Z",
-  "description": "Bumped version to 1.9.1.0057. Added 'Backups' tab to the System Debugger UI, allowing users to list and download the automatic safety backups created during repair operations.",
+  "timestamp": "2026-02-01T12:00:00.000Z",
+  "description": "Bumped version to 1.9.1.0058. Fixed Debugger UI rendering to correctly display Event Types (e.g., messages.upsert) and handle array payloads properly, resolving the issue where logs appeared empty.",
   "modules_affected": [
-    "whatsapp_node/src/api/routes/system.ts",
     "whatsapp_node/frontend/src/Debug.tsx",
     "whatsapp_node/config.yaml",
     "whatsapp_node/package.json",
