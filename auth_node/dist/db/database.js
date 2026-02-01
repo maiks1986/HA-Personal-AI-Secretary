@@ -97,6 +97,18 @@ class AuthDatabase {
         const stmt = this.db.prepare('UPDATE users SET is_totp_enabled = 1 WHERE id = ?');
         stmt.run(userId);
     }
+    listUsers() {
+        const stmt = this.db.prepare('SELECT id, username, role, created_at, last_login, is_totp_enabled FROM users');
+        const rows = stmt.all();
+        return rows.map(r => ({
+            ...r,
+            is_totp_enabled: !!r.is_totp_enabled
+        }));
+    }
+    deleteUser(id) {
+        const stmt = this.db.prepare('DELETE FROM users WHERE id = ?');
+        stmt.run(id);
+    }
 }
 exports.AuthDatabase = AuthDatabase;
 exports.db = new AuthDatabase();

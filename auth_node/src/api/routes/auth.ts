@@ -23,6 +23,15 @@ const ensureAuth = (req: Request, res: Response, next: Function) => {
     }
 };
 
+const ensureAdmin = (req: Request, res: Response, next: Function) => {
+    ensureAuth(req, res, () => {
+        if ((req as any).user.role !== 'admin') {
+            return res.status(403).json({ error: "Admin access required" });
+        }
+        next();
+    });
+};
+
 router.post('/login', (req: Request, res: Response) => {
     try {
         const body = LoginRequestSchema.parse(req.body);
@@ -166,11 +175,50 @@ router.post('/2fa/verify', ensureAuth, (req: Request, res: Response) => {
         token: token
     });
 
-    if (verified) {
-        (db as any).enableTotp(user.sub);
-        res.json({ success: true });
     } else {
         res.status(400).json({ success: false, error: "Invalid code" });
+    }
+});
+
+// --- Admin User Management ---
+
+router.get('/users', ensureAdmin, (req, res) => {
+    try {
+        const users = db.listUsers();
+        res.json({ success: true, users });
+    } catch (e: any) {
+        res.status(500).json({ success: false, error: e.message });
+    }
+});
+
+router.post('/users', ensureAdmin, (req, res) => {
+    const { username, password, role } = req.body;
+    if (!username || !password) {
+        return res.status(400).json({ success: false, error: "Username and password required" });
+    }
+
+    try {
+        const user = db.createUser(username, password, role || 'user');
+        res.json({ success: true, user });
+    } catch (e: any) {
+        if (e.message.includes('UNIQUE')) {
+            return res.status(400).json({ success: false, error: "Username already exists" });
+        }
+        res.status(500).json({ success: false, error: e.message });
+    }
+});
+
+router.delete('/users/:id', ensureAdmin, (req, res) => {
+    const { id } = req.params;
+    if (id === (req as any).user.sub) {
+        return res.status(400).json({ success: false, error: "Cannot delete yourself" });
+    }
+
+    try {
+        db.deleteUser(id);
+        res.json({ success: true });
+    } catch (e: any) {
+        res.status(500).json({ success: false, error: e.message });
     }
 });
 

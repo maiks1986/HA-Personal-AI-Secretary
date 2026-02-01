@@ -26,6 +26,14 @@ const ensureAuth = (req, res, next) => {
         return res.status(403).json({ error: "Invalid token" });
     }
 };
+const ensureAdmin = (req, res, next) => {
+    ensureAuth(req, res, () => {
+        if (req.user.role !== 'admin') {
+            return res.status(403).json({ error: "Admin access required" });
+        }
+        next();
+    });
+};
 router.post('/login', (req, res) => {
     try {
         const body = shared_schemas_1.LoginRequestSchema.parse(req.body);
@@ -139,12 +147,46 @@ router.post('/2fa/verify', ensureAuth, (req, res) => {
         encoding: 'base32',
         token: token
     });
-    if (verified) {
-        database_1.db.enableTotp(user.sub);
+}, {
+    res, : .status(400).json({ success: false, error: "Invalid code" })
+});
+// --- Admin User Management ---
+router.get('/users', ensureAdmin, (req, res) => {
+    try {
+        const users = database_1.db.listUsers();
+        res.json({ success: true, users });
+    }
+    catch (e) {
+        res.status(500).json({ success: false, error: e.message });
+    }
+});
+router.post('/users', ensureAdmin, (req, res) => {
+    const { username, password, role } = req.body;
+    if (!username || !password) {
+        return res.status(400).json({ success: false, error: "Username and password required" });
+    }
+    try {
+        const user = database_1.db.createUser(username, password, role || 'user');
+        res.json({ success: true, user });
+    }
+    catch (e) {
+        if (e.message.includes('UNIQUE')) {
+            return res.status(400).json({ success: false, error: "Username already exists" });
+        }
+        res.status(500).json({ success: false, error: e.message });
+    }
+});
+router.delete('/users/:id', ensureAdmin, (req, res) => {
+    const { id } = req.params;
+    if (id === req.user.sub) {
+        return res.status(400).json({ success: false, error: "Cannot delete yourself" });
+    }
+    try {
+        database_1.db.deleteUser(id);
         res.json({ success: true });
     }
-    else {
-        res.status(400).json({ success: false, error: "Invalid code" });
+    catch (e) {
+        res.status(500).json({ success: false, error: e.message });
     }
 });
 exports.default = router;
