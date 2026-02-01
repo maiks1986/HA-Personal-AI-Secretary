@@ -17,8 +17,13 @@ function App() {
     e.preventDefault()
     setLoading(true)
     setError('')
+
+    // Dynamic API URL for Ingress compatibility
+    const baseUrl = window.location.pathname.replace(/\/+$/, '');
+    const apiUrl = `${baseUrl}/api/auth/login`;
+
     try {
-      const res = await axios.post<LoginResponse>('./api/auth/login', { 
+      const res = await axios.post<LoginResponse>(apiUrl, { 
         username, 
         password,
         totp_code: show2FA ? totpCode : undefined
