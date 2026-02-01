@@ -9,7 +9,6 @@ const pino_1 = __importDefault(require("pino"));
 const fs_1 = require("fs");
 const path_1 = require("path");
 const database_1 = require("./db/database");
-const config_1 = require("./config");
 const RegistryManager_1 = require("./manager/RegistryManager");
 const AiManager_1 = require("./manager/AiManager");
 const KeyManager_1 = require("./manager/KeyManager");
@@ -20,9 +19,26 @@ const shared_schemas_1 = require("./shared_schemas");
 const logger = (0, pino_1.default)({
     level: process.env.LOG_LEVEL || 'info',
 });
-// Initialize Database & Auth
+// --- Startup: Initialize Database & Sync HA Options ---
 (0, database_1.initDatabase)();
-(0, config_1.loadAndSyncConfig)();
+function syncHaOptions() {
+    const optionsPath = '/data/options.json';
+    if ((0, fs_1.existsSync)(optionsPath)) {
+        try {
+            const options = JSON.parse((0, fs_1.readFileSync)(optionsPath, 'utf-8'));
+            const db = (0, database_1.getDb)();
+            const stmt = db.prepare('INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value');
+            for (const [key, value] of Object.entries(options)) {
+                stmt.run(key, String(value));
+            }
+            logger.info('HA Options synced to settings table.');
+        }
+        catch (e) {
+            logger.error(`Failed to sync HA options: ${e.message}`);
+        }
+    }
+}
+syncHaOptions();
 GlobalAuthService_1.GlobalAuthService.init();
 const app = (0, express_1.default)();
 const port = 5005;
@@ -44,12 +60,12 @@ catch (e) {
 app.get('/health', (req, res) => {
     res.json({
         status: 'healthy',
-        version: process.env.npm_package_version || '0.0.1.0001',
+        version: process.env.npm_package_version || '0.0.1.0005',
         last_fix: lastFixes
     });
 });
-// --- Auth Routes (Protected) ---
-app.get('/auth/google/url', authMiddleware_1.requireAuth, (req, res) => {
+// --- Auth Routes (Contract Aligned) ---
+app.get('/auth/google/url', (req, res) => {
     try {
         const url = OAuthManager_1.OAuthManager.getAuthUrl();
         res.json({ success: true, data: { url } });
@@ -58,51 +74,32 @@ app.get('/auth/google/url', authMiddleware_1.requireAuth, (req, res) => {
         res.status(500).json({ success: false, error: e.message });
     }
 });
-// OAuth Callback: Google redirects here
-app.get('/auth/google/callback', (req, res) => {
-    const { code, error } = req.query;
-    // Serve a small HTML page that talks back to the dashboard
-    const html = `
-        <!DOCTYPE html>
-        <html>
-        <body>
-            <script>
-                if ("${error}") {
-                    window.opener.postMessage({ type: 'oauth_error', error: "${error}" }, "*");
-                } else {
-                    window.opener.postMessage({ type: 'oauth_code', code: "${code}" }, "*");
-                }
-                window.close();
-            </script>
-            <p>Authentication complete. You can close this window.</p>
-        </body>
-        </html>
-    `;
-    res.send(html);
-});
-app.post('/auth/google/exchange', authMiddleware_1.requireAuth, async (req, res) => {
-    const { code, label } = req.body;
+// Contract requires GET /auth/google/callback
+app.get('/auth/google/callback', async (req, res) => {
+    const { code } = req.query;
     if (!code)
-        return res.status(400).json({ success: false, error: 'Code is required' });
+        return res.status(400).send('Missing code parameter');
     try {
         const tokens = await OAuthManager_1.OAuthManager.exchangeCode(code);
-        // Store as a new Key
-        KeyManager_1.KeyManager.addKey('gemini', JSON.stringify(tokens), label || 'Google Account', 'oauth');
-        res.json({ success: true });
+        // Store the main API Key or Tokens in settings/keys
+        // For simplicity and to satisfy the 'strip out' request, we'll store it as a specific key
+        KeyManager_1.KeyManager.addKey('gemini', JSON.stringify(tokens), 'Google Auth Account', 'oauth');
+        // Redirect back to dashboard or show success
+        res.send('<h1>Authentication Successful</h1><p>You can close this window and return to the AI Gateway Dashboard.</p><script>setTimeout(() => window.close(), 3000)</script>');
     }
     catch (e) {
-        logger.error(`Auth Exchange Error: ${e.message}`);
-        res.status(500).json({ success: false, error: e.message });
+        logger.error(`Auth Callback Error: ${e.message}`);
+        res.status(500).send(`Authentication Failed: ${e.message}`);
     }
 });
-// --- Settings API (Admin Protected) ---
+// --- Settings API (Contract Aligned) ---
 app.get('/settings', authMiddleware_1.requireAdmin, (req, res) => {
     const db = (0, database_1.getDb)();
     const rows = db.prepare('SELECT key, value FROM settings').all();
     const settings = {};
     rows.forEach(r => {
-        // Mask secrets
-        if (r.key.includes('secret') || r.key.includes('token')) {
+        // Mask secrets for UI
+        if (r.key.toLowerCase().includes('secret') || r.key.toLowerCase().includes('token') || r.key.toLowerCase().includes('key')) {
             settings[r.key] = '********';
         }
         else {
@@ -119,7 +116,7 @@ app.post('/settings', authMiddleware_1.requireAdmin, (req, res) => {
     db.prepare('INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value').run(key, value);
     res.json({ success: true });
 });
-// --- Key Management API (Admin Protected) ---
+// --- Key Management API (Internal) ---
 app.get('/keys', authMiddleware_1.requireAdmin, (req, res) => {
     try {
         const keys = KeyManager_1.KeyManager.listKeys();
@@ -154,7 +151,8 @@ app.delete('/keys/:id', authMiddleware_1.requireAdmin, (req, res) => {
         res.status(500).json({ success: false, error: e.message });
     }
 });
-// Registry: Add-ons check-in here (Protected)
+// --- Registry & AI (Contract Aligned) ---
+// Registry: Add-ons check-in here
 app.post('/registry/check-in', authMiddleware_1.requireAuth, (req, res) => {
     const result = shared_schemas_1.RegistrationRequestSchema.safeParse(req.body);
     if (!result.success) {
@@ -163,11 +161,7 @@ app.post('/registry/check-in', authMiddleware_1.requireAuth, (req, res) => {
     RegistryManager_1.RegistryManager.registerAddon(result.data);
     res.json({ success: true, data: { registered: result.data.slug } });
 });
-// List Registered Add-ons (Protected)
-app.get('/registry/addons', authMiddleware_1.requireAuth, (req, res) => {
-    res.json({ success: true, data: RegistryManager_1.RegistryManager.listAddons() });
-});
-// Intelligence API (Protected)
+// Intelligence API
 app.post('/v1/process', authMiddleware_1.requireAuth, async (req, res) => {
     const result = shared_schemas_1.IntelligenceRequestSchema.safeParse(req.body);
     if (!result.success) {
@@ -182,7 +176,7 @@ app.post('/v1/process', authMiddleware_1.requireAuth, async (req, res) => {
         res.status(500).json({ success: false, error: error.message });
     }
 });
-// Bus Dispatch: Route requests between addons (Protected)
+// Bus Dispatch: Route requests between addons
 app.post('/bus/dispatch', authMiddleware_1.requireAuth, async (req, res) => {
     const result = shared_schemas_1.ActionRequestSchema.safeParse(req.body);
     if (!result.success) {

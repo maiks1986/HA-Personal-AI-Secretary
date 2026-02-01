@@ -68,36 +68,20 @@ export function KeyManagement() {
                 const left = window.screen.width / 2 - width / 2;
                 const top = window.screen.height / 2 - height / 2;
                 
-                window.open(
+                const win = window.open(
                     res.data.url, 
                     'google-oauth', 
                     `width=${width},height=${height},left=${left},top=${top}`
                 );
 
-                // Listen for message from popup
-                const messageListener = async (event: MessageEvent) => {
-                    if (event.data.type === 'oauth_code') {
-                        window.removeEventListener('message', messageListener);
-                        setLoading(true);
-                        try {
-                            const exchangeRes = await api.exchangeAuthCode(event.data.code, 'Google Account');
-                            if (exchangeRes.success) {
-                                await fetchKeys();
-                            } else {
-                                alert('Failed to exchange code: ' + exchangeRes.error);
-                            }
-                        } catch (err) {
-                            alert('OAuth Exchange failed.');
-                        } finally {
-                            setLoading(false);
-                        }
-                    } else if (event.data.type === 'oauth_error') {
-                        window.removeEventListener('message', messageListener);
-                        alert('OAuth Error: ' + event.data.error);
+                // Simple polling to refresh keys once popup is closed
+                const timer = setInterval(() => {
+                    if (win?.closed) {
+                        clearInterval(timer);
+                        fetchKeys();
                     }
-                };
+                }, 1000);
 
-                window.addEventListener('message', messageListener);
             } else {
                 alert('Could not generate Auth URL. Ensure Client ID/Secret are configured in Add-on Settings.');
             }

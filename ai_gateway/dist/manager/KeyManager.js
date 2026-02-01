@@ -5,17 +5,14 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.KeyManager = void 0;
 const database_1 = require("../db/database");
-const OAuthManager_1 = require("./OAuthManager");
 const pino_1 = __importDefault(require("pino"));
 const logger = (0, pino_1.default)();
 class KeyManager {
     /**
      * Get the next available key for a provider using a round-robin or least-error strategy.
-     * Automatically refreshes OAuth tokens if expired.
      */
     static async getNextKey(provider = 'gemini') {
         const db = (0, database_1.getDb)();
-        // Simple strategy: Get active keys, sort by error_count (asc) and last_used (asc)
         const key = db.prepare(`
             SELECT * FROM api_keys 
             WHERE provider = ? AND is_active = 1 
@@ -26,40 +23,17 @@ class KeyManager {
             logger.warn(`KeyManager: No active keys found for provider '${provider}'`);
             return null;
         }
-        // Handle OAuth Refresh
+        // Simplified: Just extract access token if it's a JSON blob, but no auto-refresh.
         if (key.type === 'oauth') {
             try {
                 const tokens = JSON.parse(key.key_value);
-                // OAuthManager will check expiry and refresh if needed
-                const accessToken = await OAuthManager_1.OAuthManager.refreshAccessToken(tokens);
-                // If token changed, update DB
-                if (accessToken !== tokens.access_token) {
-                    tokens.access_token = accessToken;
-                    // Note: In a real scenario, we'd want to update expiry too if OAuthManager returned the full token set
-                    // But refreshAccessToken usually returns credentials.
-                    // For simplicity, we assume OAuthManager updates tokens object if passed by reference or we update DB here.
-                    // Actually, OAuthManager returns just the string access_token in my implementation.
-                    // Ideally, we should update the whole token blob in DB.
-                    // Let's refine OAuthManager return type in a moment, but for now:
-                    // Update key_value in memory to return valid token to caller
-                    // We DO NOT update DB here because we only got the string back.
-                    // Ideally OAuthManager should handle the full token lifecycle update.
-                    // For now, let's assume valid access token is returned.
-                    // Actually, let's just return a modified key object where key_value is the access token
-                    // The caller (AiManager) expects a string key.
-                    // For OAuth, the "key" IS the access token.
-                    return { ...key, key_value: accessToken };
-                }
-                // If not refreshed, return the access token from JSON
                 return { ...key, key_value: tokens.access_token };
             }
             catch (e) {
-                logger.error(`KeyManager: Failed to refresh OAuth token for Key ID ${key.id}: ${e.message}`);
-                this.reportFailure(key.id);
-                return null; // Force caller to try next key
+                return key;
             }
         }
-        // Update last_used immediately to rotate for the next call
+        // Update last_used immediately to rotate
         db.prepare('UPDATE api_keys SET last_used = CURRENT_TIMESTAMP WHERE id = ?').run(key.id);
         return key;
     }

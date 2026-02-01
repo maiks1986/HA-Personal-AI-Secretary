@@ -35,9 +35,5 @@ export const api = {
     getAuthUrl: async () => {
         const res = await axios.get<ApiResponse<{url: string}>>(`${API_BASE}auth/google/url`);
         return res.data;
-    },
-    exchangeAuthCode: async (code: string, label: string) => {
-        const res = await axios.post<ApiResponse>(`${API_BASE}auth/google/exchange`, { code, label });
-        return res.data;
     }
 };

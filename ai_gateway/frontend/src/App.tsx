@@ -8,24 +8,6 @@ function App() {
   const [addons, setAddons] = useState<any[]>([])
 
   useEffect(() => {
-    // Check for OAuth Callback
-    const params = new URLSearchParams(window.location.search);
-    const code = params.get('code');
-    if (code) {
-        // Clean URL immediately
-        window.history.replaceState({}, '', window.location.pathname);
-        api.exchangeAuthCode(code, 'Google Account')
-            .then(() => {
-                alert('Google Account successfully connected!');
-                // Trigger refresh logic if we had a global state, but simple reload works too
-                window.location.reload(); 
-            })
-            .catch(err => {
-                console.error(err);
-                alert('Failed to connect account: ' + (err.response?.data?.error || err.message));
-            });
-    }
-
     const fetchData = async () => {
       try {
         const [healthData, addonsData] = await Promise.all([
