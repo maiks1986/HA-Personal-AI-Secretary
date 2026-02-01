@@ -1,31 +1,50 @@
 import express from 'express';
 import cors from 'cors';
 import pino from 'pino';
-import { readFileSync } from 'fs';
+import { readFileSync, existsSync } from 'fs';
 import { join } from 'path';
 import { initDatabase, getDb } from './db/database';
-import { loadAndSyncConfig } from './config';
 import { RegistryManager } from './manager/RegistryManager';
 import { AiManager } from './manager/AiManager';
 import { KeyManager } from './manager/KeyManager';
 import { OAuthManager } from './manager/OAuthManager';
 import { GlobalAuthService } from './services/GlobalAuthService';
 import { identityResolver, requireAuth, requireAdmin } from './api/authMiddleware';
-import {
-    IntelligenceRequestSchema,
-    ActionRequestSchema,
-    RegistrationRequestSchema,
-    ApiResponse
+import { 
+    IntelligenceRequestSchema, 
+    ActionRequestSchema, 
+    RegistrationRequestSchema, 
+    ApiResponse 
 } from './shared_schemas';
 
 const logger = pino({
     level: process.env.LOG_LEVEL || 'info',
 });
 
-// Initialize Database & Auth
+// --- Startup: Initialize Database & Sync HA Options ---
 initDatabase();
-loadAndSyncConfig();
+
+function syncHaOptions() {
+    const optionsPath = '/data/options.json';
+    if (existsSync(optionsPath)) {
+        try {
+            const options = JSON.parse(readFileSync(optionsPath, 'utf-8'));
+            const db = getDb();
+            const stmt = db.prepare('INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value');
+            
+            for (const [key, value] of Object.entries(options)) {
+                stmt.run(key, String(value));
+            }
+            logger.info('HA Options synced to settings table.');
+        } catch (e: any) {
+            logger.error(`Failed to sync HA options: ${e.message}`);
+        }
+    }
+}
+syncHaOptions();
+
 GlobalAuthService.init();
+
 const app = express();
 const port = 5005;
 
@@ -50,14 +69,14 @@ try {
 app.get('/health', (req, res) => {
     res.json({
         status: 'healthy',
-        version: process.env.npm_package_version || '0.0.1.0001',
+        version: process.env.npm_package_version || '0.0.1.0005',
         last_fix: lastFixes
     });
 });
 
-// --- Auth Routes (Protected) ---
+// --- Auth Routes (Contract Aligned) ---
 
-app.get('/auth/google/url', requireAuth, (req, res) => {
+app.get('/auth/google/url', (req, res) => {
     try {
         const url = OAuthManager.getAuthUrl();
         res.json({ success: true, data: { url } } as ApiResponse);
@@ -66,54 +85,34 @@ app.get('/auth/google/url', requireAuth, (req, res) => {
     }
 });
 
-// OAuth Callback: Google redirects here
-app.get('/auth/google/callback', (req, res) => {
-    const { code, error } = req.query;
-    
-    // Serve a small HTML page that talks back to the dashboard
-    const html = `
-        <!DOCTYPE html>
-        <html>
-        <body>
-            <script>
-                if ("${error}") {
-                    window.opener.postMessage({ type: 'oauth_error', error: "${error}" }, "*");
-                } else {
-                    window.opener.postMessage({ type: 'oauth_code', code: "${code}" }, "*");
-                }
-                window.close();
-            </script>
-            <p>Authentication complete. You can close this window.</p>
-        </body>
-        </html>
-    `;
-    res.send(html);
-});
-
-app.post('/auth/google/exchange', requireAuth, async (req, res) => {
-    const { code, label } = req.body;
-    if (!code) return res.status(400).json({ success: false, error: 'Code is required' });
+// Contract requires GET /auth/google/callback
+app.get('/auth/google/callback', async (req, res) => {
+    const { code } = req.query;
+    if (!code) return res.status(400).send('Missing code parameter');
 
     try {
-        const tokens = await OAuthManager.exchangeCode(code);
-        // Store as a new Key
-        KeyManager.addKey('gemini', JSON.stringify(tokens), label || 'Google Account', 'oauth');
-        res.json({ success: true } as ApiResponse);
+        const tokens = await OAuthManager.exchangeCode(code as string);
+        // Store the main API Key or Tokens in settings/keys
+        // For simplicity and to satisfy the 'strip out' request, we'll store it as a specific key
+        KeyManager.addKey('gemini', JSON.stringify(tokens), 'Google Auth Account', 'oauth');
+        
+        // Redirect back to dashboard or show success
+        res.send('<h1>Authentication Successful</h1><p>You can close this window and return to the AI Gateway Dashboard.</p><script>setTimeout(() => window.close(), 3000)</script>');
     } catch (e: any) {
-        logger.error(`Auth Exchange Error: ${e.message}`);
-        res.status(500).json({ success: false, error: e.message } as ApiResponse);
+        logger.error(`Auth Callback Error: ${e.message}`);
+        res.status(500).send(`Authentication Failed: ${e.message}`);
     }
 });
 
-// --- Settings API (Admin Protected) ---
+// --- Settings API (Contract Aligned) ---
 
 app.get('/settings', requireAdmin, (req, res) => {
     const db = getDb();
     const rows = db.prepare('SELECT key, value FROM settings').all() as {key: string, value: string}[];
     const settings: Record<string, string> = {};
     rows.forEach(r => {
-        // Mask secrets
-        if (r.key.includes('secret') || r.key.includes('token')) {
+        // Mask secrets for UI
+        if (r.key.toLowerCase().includes('secret') || r.key.toLowerCase().includes('token') || r.key.toLowerCase().includes('key')) {
             settings[r.key] = '********';
         } else {
             settings[r.key] = r.value;
@@ -131,7 +130,7 @@ app.post('/settings', requireAdmin, (req, res) => {
     res.json({ success: true } as ApiResponse);
 });
 
-// --- Key Management API (Admin Protected) ---
+// --- Key Management API (Internal) ---
 
 app.get('/keys', requireAdmin, (req, res) => {
     try {
@@ -167,7 +166,9 @@ app.delete('/keys/:id', requireAdmin, (req, res) => {
     }
 });
 
-// Registry: Add-ons check-in here (Protected)
+// --- Registry & AI (Contract Aligned) ---
+
+// Registry: Add-ons check-in here
 app.post('/registry/check-in', requireAuth, (req, res) => {
     const result = RegistrationRequestSchema.safeParse(req.body);
     if (!result.success) {
@@ -178,12 +179,7 @@ app.post('/registry/check-in', requireAuth, (req, res) => {
     res.json({ success: true, data: { registered: result.data.slug } } as ApiResponse);
 });
 
-// List Registered Add-ons (Protected)
-app.get('/registry/addons', requireAuth, (req, res) => {
-    res.json({ success: true, data: RegistryManager.listAddons() } as ApiResponse);
-});
-
-// Intelligence API (Protected)
+// Intelligence API
 app.post('/v1/process', requireAuth, async (req, res) => {
     const result = IntelligenceRequestSchema.safeParse(req.body);
     if (!result.success) {
@@ -199,7 +195,7 @@ app.post('/v1/process', requireAuth, async (req, res) => {
     }
 });
 
-// Bus Dispatch: Route requests between addons (Protected)
+// Bus Dispatch: Route requests between addons
 app.post('/bus/dispatch', requireAuth, async (req, res) => {
     const result = ActionRequestSchema.safeParse(req.body);
     if (!result.success) {
