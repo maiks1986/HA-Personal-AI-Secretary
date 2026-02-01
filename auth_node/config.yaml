@@ -1,5 +1,5 @@
 name: "Identity Gate"
-version: "1.0.0.0005"
+version: "1.0.0.0006"
 slug: "auth_node"
 description: "Centralized Authentication & Authorization Service"
 url: "https://github.com/your-repo"

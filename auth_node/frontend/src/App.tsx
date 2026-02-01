@@ -18,7 +18,7 @@ function App() {
     setLoading(true)
     setError('')
     try {
-      const res = await axios.post<LoginResponse>('/api/auth/login', { 
+      const res = await axios.post<LoginResponse>('api/auth/login', { 
         username, 
         password,
         totp_code: show2FA ? totpCode : undefined
