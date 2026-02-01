@@ -335,10 +335,14 @@ export class MessageManager {
                 VALUES (?, ?, ?, ?, ?)
                 ON CONFLICT(instance_id, jid) DO UPDATE SET
                 name = CASE WHEN (chats.name IS NULL OR chats.name = '' OR chats.name LIKE '%@s.whatsapp.net' OR chats.name = 'Unnamed Group') AND excluded.name IS NOT NULL AND excluded.name != '' THEN excluded.name ELSE chats.name END,
-                last_message_timestamp = CASE WHEN excluded.last_message_timestamp IS NOT NULL THEN excluded.last_message_timestamp ELSE chats.last_message_timestamp END
+                last_message_timestamp = CASE WHEN excluded.last_message_timestamp >= COALESCE(chats.last_message_timestamp, '0') THEN excluded.last_message_timestamp ELSE chats.last_message_timestamp END
             `).run(this.instanceId, jid, chatIdentityName, 0, timestamp);
 
-            db.prepare('UPDATE chats SET last_message_text = ?, last_message_timestamp = ? WHERE instance_id = ? AND jid = ?').run(text || `[${type}]`, timestamp, this.instanceId, jid);
+            db.prepare(`
+                UPDATE chats 
+                SET last_message_text = ?, last_message_timestamp = ? 
+                WHERE instance_id = ? AND jid = ? AND (? >= COALESCE(last_message_timestamp, '0'))
+            `).run(text || `[${type}]`, timestamp, this.instanceId, jid, timestamp);
             this.io.emit('new_message', { instanceId: this.instanceId, jid, text });
         } catch (err) {
             console.error(`[MessageManager ${this.instanceId}]: CRITICAL Error saving message:`, err);

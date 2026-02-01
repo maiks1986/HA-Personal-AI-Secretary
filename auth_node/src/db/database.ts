@@ -12,17 +12,25 @@ export class AuthDatabase {
     private db: Database.Database;
 
     constructor() {
-        console.log(`Initializing Database at ${DB_PATH}`);
-        
         // Extra safety: Ensure directory exists
         const dir = path.dirname(DB_PATH);
         if (!fs.existsSync(dir)) {
             console.log(`Creating directory for database: ${dir}`);
-            fs.mkdirSync(dir, { recursive: true });
+            try {
+                fs.mkdirSync(dir, { recursive: true });
+            } catch (err) {
+                console.error(`FAILED to create directory ${dir}:`, err);
+            }
         }
 
-        this.db = new Database(DB_PATH);
-        this.init();
+        console.log(`Initializing Database at ${DB_PATH}`);
+        try {
+            this.db = new Database(DB_PATH);
+            this.init();
+        } catch (err) {
+            console.error(`CRITICAL: Failed to open database at ${DB_PATH}:`, err);
+            throw err;
+        }
     }
 
     private init() {

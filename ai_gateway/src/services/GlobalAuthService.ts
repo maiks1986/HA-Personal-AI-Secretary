@@ -1,7 +1,11 @@
 import axios from 'axios';
 import jwt from 'jsonwebtoken';
 
-const AUTH_URL = process.env.AUTH_PROVIDER_URL || 'http://localhost:5006';
+// Detect HA environment for internal DNS
+const isProduction = !!process.env.SUPERVISOR_TOKEN;
+// Note: In a real HA add-on, the hostname is [repo_hash]-[slug]
+// For now, we allow the user to override via AUTH_PROVIDER_URL
+const AUTH_URL = process.env.AUTH_PROVIDER_URL || (isProduction ? 'http://a0d7b954-auth-node:5006' : 'http://localhost:5006');
 
 export interface AuthUser {
     id: string;
@@ -22,8 +26,9 @@ export class GlobalAuthService {
                 this.publicKey = res.data;
                 console.log('[GlobalAuth] Public Key loaded successfully.');
             }
-        } catch (e) {
-            console.warn(`[GlobalAuth] Failed to fetch Public Key from ${AUTH_URL}. Global Auth will be disabled.`, (e as any).message);
+        } catch (e: any) {
+            console.warn(`[GlobalAuth] Failed to fetch Public Key from ${AUTH_URL}. Global Auth will be disabled.`);
+            console.warn(`[GlobalAuth] Reason: ${e.message}`);
         }
     }
 

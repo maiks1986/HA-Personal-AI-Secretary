@@ -1,4 +1,4 @@
 {
-  "timestamp": "2026-02-01T12:30:00Z",
-  "description": "Fixed /data directory missing error in HA environment"
+  "timestamp": "2026-02-01T13:00:00Z",
+  "description": "Fixed crash by ensuring database directory exists before initialization in both loadConfig and AuthDatabase."
 }

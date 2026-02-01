@@ -17,7 +17,9 @@ import {
   CalendarListEntry,
   CalendarEvent,
   SyncResponse,
-  TokenExchangeRequestSchema
+  TokenExchangeRequestSchema,
+  CalendarCheckRequestSchema,
+  CalendarInsertRequestSchema
 } from './shared_schemas';
 
 const logger = pino({
@@ -29,7 +31,7 @@ const logger = pino({
 });
 
 const app = express();
-const PORT = process.env.PORT || 5002;
+const PORT = process.env.PORT || 5003;
 const config = loadConfig();
 
 // Initialize Managers
@@ -158,6 +160,43 @@ app.get('/api/calendar/events', async (req: Request, res: Response<CalendarEvent
       (end as string) || new Date(Date.now() + 86400000).toISOString()
     );
     res.json(events);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/calendar/check', async (req: Request, res: Response<CalendarEvent[] | { error: string }>) => {
+  const validationResult = CalendarCheckRequestSchema.safeParse(req.body);
+  if (!validationResult.success) {
+    return res.status(400).json({ error: validationResult.error.errors[0].message });
+  }
+
+  const { start, end } = validationResult.data;
+  try {
+    const events = await calendarManager.getAvailableSlots(start, end);
+    res.json(events);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/calendar/insert', async (req: Request, res: Response<any | { error: string }>) => {
+  const validationResult = CalendarInsertRequestSchema.safeParse(req.body);
+  if (!validationResult.success) {
+    return res.status(400).json({ error: validationResult.error.errors[0].message });
+  }
+
+  const { subject, start, duration_minutes, description } = validationResult.data;
+  const endTime = new Date(new Date(start).getTime() + (duration_minutes || 60) * 60000).toISOString();
+
+  try {
+    const event = await calendarManager.insertEvent(MAIN_INSTANCE_ID, {
+      summary: subject,
+      description: description,
+      start: { dateTime: start },
+      end: { dateTime: endTime },
+    });
+    res.json(event);
   } catch (err: any) {
     res.status(500).json({ error: err.message });
   }

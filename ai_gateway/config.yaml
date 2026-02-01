@@ -1,5 +1,5 @@
 name: "AI Gateway"
-version: "0.0.1.0003"
+version: "0.0.1.0004"
 slug: "ai_gateway"
 description: "Centralized Intelligence & Routing for the Personal Secretary Ecosystem"
 arch:

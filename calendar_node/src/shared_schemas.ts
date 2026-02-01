@@ -81,7 +81,43 @@ export const CalendarEventSchema = z.object({
 export type CalendarEvent = z.infer<typeof CalendarEventSchema>;
 
 export const SyncResponseSchema = z.object({
+
   success: z.boolean(),
+
   count: z.number(),
+
 });
+
 export type SyncResponse = z.infer<typeof SyncResponseSchema>;
+
+
+
+// --- Contract API Schemas ---
+
+
+
+export const CalendarCheckRequestSchema = z.object({
+
+  start: z.string().datetime(),
+
+  end: z.string().datetime(),
+
+});
+
+export type CalendarCheckRequest = z.infer<typeof CalendarCheckRequestSchema>;
+
+
+
+export const CalendarInsertRequestSchema = z.object({
+
+  subject: z.string().min(1),
+
+  start: z.string().datetime(),
+
+  duration_minutes: z.number().optional().default(60),
+
+  description: z.string().optional(),
+
+});
+
+export type CalendarInsertRequest = z.infer<typeof CalendarInsertRequestSchema>;

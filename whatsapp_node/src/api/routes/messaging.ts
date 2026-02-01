@@ -20,8 +20,8 @@ export const messagingRouter = () => {
                 c.jid, 
                 COALESCE(co.name, c.name, c.jid) as name, 
                 SUM(c.unread_count) as unread_count, 
-                MAX(c.last_message_text) as last_message_text, 
-                MAX(c.last_message_timestamp) as last_message_timestamp,
+                c.last_message_text, 
+                c.last_message_timestamp,
                 MAX(c.is_archived) as is_archived,
                 MAX(c.is_pinned) as is_pinned,
                 MAX(c.ephemeral_mode) as ephemeral_mode,
@@ -33,7 +33,7 @@ export const messagingRouter = () => {
               AND c.jid NOT LIKE '%@broadcast'
               AND (c.last_message_timestamp IS NOT NULL OR c.is_pinned = 1 OR c.unread_count > 0)
             GROUP BY COALESCE(co.lid, c.jid)
-            ORDER BY MAX(c.is_pinned) DESC, MAX(c.last_message_timestamp) DESC
+            ORDER BY MAX(c.is_pinned) DESC, c.last_message_timestamp DESC
         `).all(instanceId) as Chat[];
         res.json(chats);
     });

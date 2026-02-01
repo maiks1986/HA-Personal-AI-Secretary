@@ -103,6 +103,22 @@ export class CalendarManager {
     return presenceCalendars;
   }
 
+  public async insertEvent(instanceId: string, eventDetails: any) {
+    const auth = this.authManagers.get(instanceId);
+    if (!auth || !auth.isAuthorized()) throw new Error('Instance not authorized');
+
+    const calendar = google.calendar({ version: 'v3', auth: auth.getClient() });
+    const res = await calendar.events.insert({
+      calendarId: 'primary',
+      requestBody: eventDetails,
+    });
+    
+    // Save to shadow DB immediately
+    this.db.saveEvent(res.data, 'primary', instanceId);
+    
+    return res.data;
+  }
+
   // The "Adriana Shield" Logic
   public async updateSocialSlots() {
     const socialCals = this.db.getCalendarsByRole('social_slots');

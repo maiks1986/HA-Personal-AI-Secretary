@@ -1,9 +1,9 @@
 {
-  "timestamp": "2026-02-01T12:00:00.000Z",
-  "description": "Bumped version to 1.9.1.0058. Fixed Debugger UI rendering to correctly display Event Types (e.g., messages.upsert) and handle array payloads properly, resolving the issue where logs appeared empty.",
+  "timestamp": "2026-02-01T15:00:00.000Z",
+  "description": "Bumped version to 1.9.1.0059. Fixed Sidebar last message preview logic by ensuring 'last_message_text' and 'last_message_timestamp' are only updated when a truly newer message is received, preventing historical syncs from overwriting the latest message. Also optimized the API query to use these fields directly instead of unreliable 'MAX' aggregators on text fields.",
   "modules_affected": [
-    "whatsapp_node/frontend/src/Debug.tsx",
-    "whatsapp_node/config.yaml",
+    "whatsapp_node/src/manager/modules/MessageManager.ts",
+    "whatsapp_node/src/api/routes/messaging.ts",
     "whatsapp_node/package.json",
     "whatsapp_node/src/last_fixes.json"
   ]

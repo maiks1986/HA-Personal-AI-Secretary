@@ -28,6 +28,7 @@ whatsapp_ui/config.json
 # Secrets (just in case)
 .env
 start_gemini_yolo.bat
+*/start_gemini_*.bat
 GEMINI.md
 
 # Logs
