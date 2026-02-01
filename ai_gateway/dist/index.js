@@ -58,6 +58,28 @@ app.get('/auth/google/url', authMiddleware_1.requireAuth, (req, res) => {
         res.status(500).json({ success: false, error: e.message });
     }
 });
+// OAuth Callback: Google redirects here
+app.get('/auth/google/callback', (req, res) => {
+    const { code, error } = req.query;
+    // Serve a small HTML page that talks back to the dashboard
+    const html = `
+        <!DOCTYPE html>
+        <html>
+        <body>
+            <script>
+                if ("${error}") {
+                    window.opener.postMessage({ type: 'oauth_error', error: "${error}" }, "*");
+                } else {
+                    window.opener.postMessage({ type: 'oauth_code', code: "${code}" }, "*");
+                }
+                window.close();
+            </script>
+            <p>Authentication complete. You can close this window.</p>
+        </body>
+        </html>
+    `;
+    res.send(html);
+});
 app.post('/auth/google/exchange', authMiddleware_1.requireAuth, async (req, res) => {
     const { code, label } = req.body;
     if (!code)

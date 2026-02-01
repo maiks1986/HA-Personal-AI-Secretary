@@ -1,4 +1,4 @@
 {
-  "timestamp": "2026-02-01T17:10:00Z",
-  "description": "Removed OAuth editing from UI. OAuth settings are now read-only in the dashboard and must be managed via HA Add-on options. Bumped version to 0.0.1.0010."
+  "timestamp": "2026-02-01T17:45:00Z",
+  "description": "Implemented full OAuth callback flow with backend /auth/google/callback and frontend popup postMessage listener. Bumped version to 0.0.1.0011."
 }
