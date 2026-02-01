@@ -12,7 +12,12 @@ The core messaging engine handling the heavy lifting using the stable Baileys li
 *   **Features:** Multi-device support, Presence Sensors (HA integration), AI Message Drafting, Ephemeral Mode.
 *   **Installation:** In Home Assistant, go to **Settings > Add-ons > Add-on Store**, add this repo, search for **"WhatsApp Node Engine"** and click **Install**.
 
-### 2. Google Calendar Master (Coming Soon)
+### 2. Identity Gate (Authentication Service)
+The centralized security hub for the ecosystem.
+*   **Features:** User Management, JWT Issuance, Role-Based Access Control, Two-Factor Authentication (2FA).
+*   **Purpose:** Allows secure remote access to the WhatsApp/Calendar UI without exposing the entire Home Assistant instance.
+
+### 3. Google Calendar Master (Coming Soon)
 A specialized module to manage complex scheduling and conflict resolution.
 
 ---
