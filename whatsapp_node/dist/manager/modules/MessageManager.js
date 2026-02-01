@@ -1,0 +1,362 @@
+"use strict";
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.MessageManager = void 0;
+const baileys_1 = require("@whiskeysockets/baileys");
+const database_1 = require("../../db/database");
+const utils_1 = require("../../utils");
+const path_1 = __importDefault(require("path"));
+const fs_1 = __importDefault(require("fs"));
+class MessageManager {
+    instanceId;
+    sock;
+    io;
+    logger;
+    profilePicCallback;
+    constructor(instanceId, sock, io, logger, profilePicCallback) {
+        this.instanceId = instanceId;
+        this.sock = sock;
+        this.io = io;
+        this.logger = logger;
+        this.profilePicCallback = profilePicCallback;
+    }
+    // --- MASS SYNC HANDLERS ---
+    async handleHistorySet(payload) {
+        const { chats, contacts, messages } = payload;
+        const db = (0, database_1.getDb)();
+        console.log(`[Sync ${this.instanceId}]: Processing Initial History Set (${chats?.length || 0} chats, ${contacts?.length || 0} contacts)`);
+        db.transaction(() => {
+            // 1. Save all contacts
+            if (contacts) {
+                const contactJids = [];
+                for (const contact of contacts) {
+                    if (contact.id.includes('@broadcast'))
+                        continue;
+                    contactJids.push(contact.id);
+                    const id = contact.id;
+                    const normalized = (0, utils_1.normalizeJid)(id);
+                    const name = contact.name || contact.notify || contact.verifiedName || null;
+                    const lid = contact.lid || (id.includes('@lid') ? id : null);
+                    // Save contact even if name is null - we might get it later or from a message
+                    db.prepare(`
+                        INSERT INTO contacts (instance_id, jid, name, lid) 
+                        VALUES (?, ?, ?, ?) 
+                        ON CONFLICT(instance_id, jid) DO UPDATE SET 
+                        name = CASE WHEN excluded.name IS NOT NULL THEN excluded.name ELSE contacts.name END,
+                        lid = COALESCE(excluded.lid, contacts.lid)
+                    `).run(this.instanceId, normalized, name, lid);
+                }
+                if (this.profilePicCallback)
+                    this.profilePicCallback(contactJids);
+            }
+            // 2. Save all chats
+            if (chats) {
+                const chatJids = [];
+                for (const chat of chats) {
+                    if (chat.id.includes('@broadcast'))
+                        continue;
+                    const normalized = (0, utils_1.normalizeJid)(chat.id);
+                    const jid = this.getCanonicalJid(normalized); // Canonicalize!
+                    chatJids.push(jid);
+                    const name = chat.name || this.resolveNameFromContacts(jid);
+                    db.prepare('INSERT INTO chats (instance_id, jid, name, unread_count) VALUES (?, ?, ?, ?) ON CONFLICT(instance_id, jid) DO UPDATE SET name = CASE WHEN excluded.name IS NOT NULL AND excluded.name != \'\' THEN excluded.name ELSE chats.name END').run(this.instanceId, jid, name, chat.unreadCount || 0);
+                }
+                if (this.profilePicCallback)
+                    this.profilePicCallback(chatJids);
+            }
+        })();
+        // 3. Process historical messages
+        if (messages) {
+            console.log(`[Sync ${this.instanceId}]: Saving ${messages.length} historical messages...`);
+            for (const msg of messages)
+                await this.saveMessageToDb(msg);
+        }
+        this.io.emit('chat_update', { instanceId: this.instanceId });
+    }
+    async handleChatsUpsert(chats) {
+        const db = (0, database_1.getDb)();
+        const chatJids = [];
+        for (const chat of chats) {
+            const normalized = (0, utils_1.normalizeJid)(chat.id);
+            const jid = this.getCanonicalJid(normalized); // Canonicalize!
+            chatJids.push(jid);
+            const name = chat.name || this.resolveNameFromContacts(jid);
+            db.prepare('INSERT INTO chats (instance_id, jid, name, unread_count) VALUES (?, ?, ?, ?) ON CONFLICT(instance_id, jid) DO UPDATE SET name = excluded.name').run(this.instanceId, jid, name, chat.unreadCount || 0);
+        }
+        this.io.emit('chat_update', { instanceId: this.instanceId });
+        if (this.profilePicCallback)
+            this.profilePicCallback(chatJids);
+    }
+    async handleChatsUpdate(updates) {
+        const db = (0, database_1.getDb)();
+        for (const update of updates) {
+            if (!update.id)
+                continue;
+            const normalized = (0, utils_1.normalizeJid)(update.id);
+            if (update.unreadCount !== undefined)
+                db.prepare('UPDATE chats SET unread_count = ? WHERE instance_id = ? AND jid = ?').run(update.unreadCount, this.instanceId, normalized);
+            if (update.name)
+                db.prepare('UPDATE chats SET name = ? WHERE instance_id = ? AND jid = ?').run(update.name, this.instanceId, normalized);
+        }
+        this.io.emit('chat_update', { instanceId: this.instanceId });
+    }
+    mergeIdentities(phoneJid, lid) {
+        const db = (0, database_1.getDb)();
+        try {
+            db.transaction(() => {
+                // Move messages from LID to Phone JID
+                db.prepare('UPDATE messages SET chat_jid = ? WHERE instance_id = ? AND chat_jid = ?').run(phoneJid, this.instanceId, lid);
+                // Move/Merge chat stats
+                const lidChat = db.prepare('SELECT * FROM chats WHERE instance_id = ? AND jid = ?').get(this.instanceId, lid);
+                if (lidChat) {
+                    db.prepare(`
+                        INSERT INTO chats (instance_id, jid, unread_count, last_message_text, last_message_timestamp)
+                        VALUES (?, ?, ?, ?, ?)
+                        ON CONFLICT(instance_id, jid) DO UPDATE SET
+                        unread_count = chats.unread_count + excluded.unread_count,
+                        last_message_timestamp = MAX(chats.last_message_timestamp, excluded.last_message_timestamp)
+                    `).run(this.instanceId, phoneJid, lidChat.unread_count, lidChat.last_message_text, lidChat.last_message_timestamp);
+                    // Delete the duplicate LID chat
+                    db.prepare('DELETE FROM chats WHERE instance_id = ? AND jid = ?').run(this.instanceId, lid);
+                }
+            })();
+            console.log(`[MessageManager]: Successfully merged identities ${lid} -> ${phoneJid}`);
+        }
+        catch (e) {
+            console.error(`[MessageManager]: Failed to merge identities`, e);
+        }
+    }
+    async handleContactsUpsert(contacts) {
+        const db = (0, database_1.getDb)();
+        console.log(`[Contacts Upsert ${this.instanceId}]: Received ${contacts.length} contacts`);
+        const contactJids = [];
+        for (const contact of contacts) {
+            contactJids.push(contact.id);
+            let id = contact.id;
+            const lid = contact.lid || (id.includes('@lid') ? id : null);
+            const normalized = (0, utils_1.normalizeJid)(id);
+            const name = contact.name || contact.notify || contact.verifiedName;
+            db.prepare(`
+                INSERT INTO contacts (instance_id, jid, name, lid) 
+                VALUES (?, ?, ?, ?) 
+                ON CONFLICT(instance_id, jid) DO UPDATE SET 
+                name = CASE WHEN excluded.name IS NOT NULL THEN excluded.name ELSE contacts.name END,
+                lid = COALESCE(excluded.lid, contacts.lid)
+            `).run(this.instanceId, normalized, name, lid);
+            // If we just learned a Phone -> LID mapping, trigger a merge
+            if (!normalized.endsWith('@lid') && lid && lid.endsWith('@lid')) {
+                this.mergeIdentities(normalized, lid);
+            }
+        }
+        if (this.profilePicCallback)
+            this.profilePicCallback(contactJids);
+    }
+    async handleContactsUpdate(updates) {
+        const db = (0, database_1.getDb)();
+        for (const update of updates) {
+            if (!update.id)
+                continue;
+            const normalized = (0, utils_1.normalizeJid)(update.id);
+            const name = update.name || update.notify || update.verifiedName;
+            const lid = update.lid;
+            if (name)
+                db.prepare('UPDATE contacts SET name = ? WHERE instance_id = ? AND jid = ?').run(name, this.instanceId, normalized);
+            if (lid)
+                db.prepare('UPDATE contacts SET lid = ? WHERE instance_id = ? AND jid = ?').run(lid, this.instanceId, normalized);
+        }
+    }
+    // --- LOGIC HELPERS ---
+    async handleIncomingMessages(m) {
+        for (const msg of m.messages)
+            await this.saveMessageToDb(msg);
+        this.io.emit('chat_update', { instanceId: this.instanceId });
+    }
+    resolveNameFromContacts(jid) {
+        const db = (0, database_1.getDb)();
+        const contact = db.prepare('SELECT name FROM contacts WHERE instance_id = ? AND jid = ?').get(this.instanceId, jid);
+        return contact?.name || jid.split('@')[0];
+    }
+    getCanonicalJid(jid) {
+        const db = (0, database_1.getDb)();
+        // 1. If it's a LID, try to find the associated Phone JID
+        if (jid.endsWith('@lid')) {
+            const row = db.prepare('SELECT jid FROM contacts WHERE instance_id = ? AND lid = ? AND jid NOT LIKE \'%@lid\'').get(this.instanceId, jid);
+            if (row?.jid)
+                return row.jid;
+        }
+        return jid;
+    }
+    async saveMessageToDb(m) {
+        try {
+            const message = m.message;
+            if (!message)
+                return;
+            const db = (0, database_1.getDb)();
+            const rawJid = (0, utils_1.normalizeJid)(m.key.remoteJid);
+            const jid = this.getCanonicalJid(rawJid); // Canonicalize Group/Chat
+            const whatsapp_id = m.key.id || `fallback_${Date.now()}_${Math.random()}`;
+            const timestamp = new Date(Number(m.messageTimestamp) * 1000).toISOString();
+            const is_from_me = m.key.fromMe ? 1 : 0;
+            // FIX: Participant can be in m.key.participant OR m.participant (historical/Baileys quirk)
+            const rawSenderJid = m.key.participant || m.participant || m.key.remoteJid;
+            const normalizedSenderJid = (0, utils_1.normalizeJid)(rawSenderJid);
+            const sender_jid = this.getCanonicalJid(normalizedSenderJid); // Canonicalize Participant!
+            const isGroup = rawJid.endsWith('@g.us');
+            // SENDER NAME RESOLUTION & AUTO-LEARN
+            let senderName = m.pushName;
+            // If it's a group and sender_jid is the group itself (participant still missing after check), 
+            // we should not use the group name as the sender name.
+            if (isGroup && sender_jid === jid) {
+                senderName = "System";
+            }
+            if (senderName && senderName !== 'Unknown' && senderName !== 'System') {
+                // If we got a name from the message, make sure it's in our contacts list for this JID
+                db.prepare(`
+                    INSERT INTO contacts (instance_id, jid, name) VALUES (?, ?, ?)
+                    ON CONFLICT(instance_id, jid) DO UPDATE SET name = CASE WHEN contacts.name IS NULL OR contacts.name = '' THEN excluded.name ELSE contacts.name END
+                `).run(this.instanceId, sender_jid, senderName);
+            }
+            if (!senderName || senderName === 'Unknown') {
+                const contactName = this.resolveNameFromContacts(sender_jid);
+                // Ensure we don't use the group name as the participant name
+                if (contactName && contactName !== sender_jid.split('@')[0]) {
+                    senderName = contactName;
+                }
+            }
+            // LAST RESORT FALLBACKS:
+            if (!senderName || senderName === 'Unknown') {
+                // Use chosen name from message if available
+                if (m.pushName && m.pushName !== 'Unknown') {
+                    senderName = m.pushName;
+                }
+                else {
+                    // Use phone number
+                    senderName = sender_jid.split('@')[0];
+                }
+            }
+            // IDENTITY RESOLUTION: The Chat identity should always be the contact name (1-on-1) or group subject.
+            let chatIdentityName = this.resolveNameFromContacts(jid);
+            if (rawJid === 'status@broadcast') {
+                await this.handleStatusUpdate(m);
+                return;
+            }
+            let text = message.conversation || message.extendedTextMessage?.text || "";
+            let type = 'text';
+            let media_path = null;
+            let latitude = null;
+            let longitude = null;
+            let vcard_data = null;
+            const mediaType = Object.keys(message)[0];
+            if (['imageMessage', 'videoMessage', 'audioMessage', 'documentMessage', 'stickerMessage'].includes(mediaType)) {
+                type = mediaType.replace('Message', '');
+                text = message[mediaType]?.caption || "";
+                try {
+                    const buffer = await (0, baileys_1.downloadMediaMessage)(m, 'buffer', {}, { logger: this.logger, reuploadRequest: this.sock.updateMediaMessage });
+                    const fileName = `${whatsapp_id}.${type === 'audio' ? 'ogg' : type === 'image' ? 'jpg' : type === 'video' ? 'mp4' : 'bin'}`;
+                    const dir = process.env.NODE_ENV === 'development' ? path_1.default.join(__dirname, '../../../media') : '/data/media';
+                    if (!fs_1.default.existsSync(dir))
+                        fs_1.default.mkdirSync(dir, { recursive: true });
+                    media_path = path_1.default.join(dir, fileName);
+                    fs_1.default.writeFileSync(media_path, buffer);
+                }
+                catch (e) { }
+            }
+            if (message.pollCreationMessage || message.pollCreationMessageV2 || message.pollCreationMessageV3) {
+                type = 'poll';
+                const poll = message.pollCreationMessage || message.pollCreationMessageV2 || message.pollCreationMessageV3;
+                text = `Poll: ${poll?.name}\nOptions: ${poll?.options?.map(o => o.optionName).join(', ')}`;
+            }
+            if (message.locationMessage || message.liveLocationMessage) {
+                type = 'location';
+                const loc = message.locationMessage || message.liveLocationMessage;
+                latitude = loc?.degreesLatitude;
+                longitude = loc?.degreesLongitude;
+                text = `Location: ${latitude}, ${longitude}`;
+            }
+            if (message.contactMessage || message.contactsArrayMessage) {
+                type = 'vcard';
+                vcard_data = message.contactMessage ? message.contactMessage.vcard : JSON.stringify(message.contactsArrayMessage?.contacts?.map(c => c.vcard) || []);
+                text = "Shared Contact Card";
+            }
+            if (message.protocolMessage?.type === 14) {
+                const editedId = message.protocolMessage.key?.id;
+                const newText = message.protocolMessage.editedMessage?.conversation || message.protocolMessage.editedMessage?.extendedTextMessage?.text;
+                if (editedId && newText)
+                    db.prepare('UPDATE messages SET text = ? WHERE whatsapp_id = ?').run(newText, editedId);
+                return;
+            }
+            if (message.reactionMessage) {
+                const targetId = message.reactionMessage.key?.id;
+                const emoji = message.reactionMessage.text;
+                if (targetId && emoji) {
+                    db.prepare('INSERT OR REPLACE INTO reactions (instance_id, message_whatsapp_id, sender_jid, emoji) VALUES (?, ?, ?, ?)')
+                        .run(this.instanceId, targetId, sender_jid, emoji);
+                }
+                return;
+            }
+            // FILTER: STRICTER - Skip empty text messages (prevents ghost messages from protocol events/syncs)
+            const isTextType = type === 'text';
+            const hasNoContent = !text || text.trim().length === 0;
+            const hasNoMedia = !media_path;
+            const hasNoVcard = !vcard_data;
+            const hasNoLocation = !latitude && !longitude;
+            if (isTextType && hasNoContent && hasNoMedia && hasNoVcard && hasNoLocation) {
+                // console.log(`[MessageManager ${this.instanceId}]: Skipping empty message from ${sender_jid}`);
+                return;
+            }
+            // Save Message
+            db.prepare(`
+                INSERT INTO messages 
+                (instance_id, whatsapp_id, chat_jid, sender_jid, sender_name, text, type, media_path, latitude, longitude, vcard_data, status, timestamp, is_from_me) 
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(whatsapp_id) DO UPDATE SET text = excluded.text, status = excluded.status
+            `).run(this.instanceId, whatsapp_id, jid, sender_jid, senderName, text, type, media_path, latitude, longitude, vcard_data, 'sent', timestamp, is_from_me);
+            // Save/Update Chat with Identity Name (Ensures it doesn't change to "Me" or individual sender name)
+            db.prepare(`
+                INSERT INTO chats (instance_id, jid, name, unread_count, last_message_timestamp) 
+                VALUES (?, ?, ?, ?, ?)
+                ON CONFLICT(instance_id, jid) DO UPDATE SET
+                name = CASE WHEN (chats.name IS NULL OR chats.name = '' OR chats.name LIKE '%@s.whatsapp.net' OR chats.name = 'Unnamed Group') AND excluded.name IS NOT NULL AND excluded.name != '' THEN excluded.name ELSE chats.name END,
+                last_message_timestamp = CASE WHEN excluded.last_message_timestamp >= COALESCE(chats.last_message_timestamp, '0') THEN excluded.last_message_timestamp ELSE chats.last_message_timestamp END
+            `).run(this.instanceId, jid, chatIdentityName, 0, timestamp);
+            db.prepare(`
+                UPDATE chats 
+                SET last_message_text = ?, last_message_timestamp = ? 
+                WHERE instance_id = ? AND jid = ? AND (? >= COALESCE(last_message_timestamp, '0'))
+            `).run(text || `[${type}]`, timestamp, this.instanceId, jid, timestamp);
+            this.io.emit('new_message', { instanceId: this.instanceId, jid, text });
+        }
+        catch (err) {
+            console.error(`[MessageManager ${this.instanceId}]: CRITICAL Error saving message:`, err);
+        }
+    }
+    async handleStatusUpdate(m) {
+        const message = m.message;
+        const rawSenderJid = m.key.participant || m.participant || m.key.remoteJid;
+        const sender_jid = this.getCanonicalJid((0, utils_1.normalizeJid)(rawSenderJid));
+        const sender_name = m.pushName || "Unknown";
+        const timestamp = new Date(Number(m.messageTimestamp) * 1000).toISOString();
+        let text = message?.conversation || message?.extendedTextMessage?.text || "";
+        let type = 'text';
+        let media_path = null;
+        const mediaType = message ? Object.keys(message)[0] : '';
+        if (['imageMessage', 'videoMessage'].includes(mediaType)) {
+            type = mediaType.replace('Message', '');
+            try {
+                const buffer = await (0, baileys_1.downloadMediaMessage)(m, 'buffer', {}, { logger: this.logger, reuploadRequest: this.sock.updateMediaMessage });
+                const fileName = `status_${m.key.id}.${type === 'image' ? 'jpg' : 'mp4'}`;
+                const dir = process.env.NODE_ENV === 'development' ? path_1.default.join(__dirname, '../../../media') : '/data/media';
+                if (!fs_1.default.existsSync(dir))
+                    fs_1.default.mkdirSync(dir, { recursive: true });
+                media_path = path_1.default.join(dir, fileName);
+                fs_1.default.writeFileSync(media_path, buffer);
+            }
+            catch (e) { }
+        }
+        (0, database_1.getDb)().prepare(`INSERT INTO status_updates (instance_id, sender_jid, sender_name, type, text, media_path, timestamp) VALUES (?, ?, ?, ?, ?, ?, ?)`).run(this.instanceId, sender_jid, sender_name, type, text, media_path, timestamp);
+        this.io.emit('status_update', { instanceId: this.instanceId });
+    }
+}
+exports.MessageManager = MessageManager;

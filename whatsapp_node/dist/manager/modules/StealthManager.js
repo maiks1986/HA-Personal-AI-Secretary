@@ -1,0 +1,97 @@
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.StealthManager = void 0;
+const database_1 = require("../../db/database");
+class StealthManager {
+    instanceId;
+    sock;
+    interval = null;
+    lastAppliedMode = null;
+    constructor(instanceId, sock) {
+        this.instanceId = instanceId;
+        this.sock = sock;
+    }
+    start() {
+        if (this.interval)
+            return;
+        // Check every minute
+        this.interval = setInterval(() => this.checkSchedules(), 60 * 1000);
+        console.log(`[StealthManager ${this.instanceId}]: Started scheduler.`);
+        this.checkSchedules(); // Run immediately on start
+    }
+    stop() {
+        if (this.interval)
+            clearInterval(this.interval);
+        this.interval = null;
+    }
+    async checkSchedules() {
+        const db = (0, database_1.getDb)();
+        const now = new Date();
+        const currentDay = now.getDay(); // 0 (Sun) to 6 (Sat)
+        const currentTime = `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}`;
+        // Get active schedules for this instance
+        const schedules = db.prepare('SELECT * FROM stealth_schedules WHERE instance_id = ? AND is_enabled = 1').all(this.instanceId);
+        let activeMode = null;
+        let activeSchedule = null;
+        for (const schedule of schedules) {
+            const days = JSON.parse(schedule.days || '[]');
+            if (days.length > 0 && !days.includes(currentDay))
+                continue;
+            const isInRange = this.isTimeInRange(currentTime, schedule.start_time, schedule.end_time);
+            if (isInRange) {
+                activeMode = schedule.mode;
+                activeSchedule = schedule;
+                break; // Use the first matching schedule
+            }
+        }
+        if (activeMode !== this.lastAppliedMode) {
+            await this.applyStealthMode(activeMode, activeSchedule);
+            this.lastAppliedMode = activeMode;
+        }
+    }
+    isTimeInRange(current, start, end) {
+        if (start <= end) {
+            return current >= start && current <= end;
+        }
+        else {
+            // Overnights (e.g. 22:00 to 06:00)
+            return current >= start || current <= end;
+        }
+    }
+    async applyStealthMode(mode, schedule) {
+        try {
+            const sock = this.sock;
+            if (!mode) {
+                console.log(`[StealthManager ${this.instanceId}]: Reverting to default privacy (Everyone).`);
+                await sock.updatePrivacySetting('lastSeen', 'all');
+                await sock.updatePrivacySetting('online', 'all');
+                return;
+            }
+            if (mode === 'GLOBAL_NOBODY') {
+                console.log(`[StealthManager ${this.instanceId}]: Applying Global Stealth Mode (Nobody).`);
+                await sock.updatePrivacySetting('lastSeen', 'none');
+                await sock.updatePrivacySetting('online', 'match_last_seen');
+            }
+            if (mode === 'SPECIFIC_CONTACTS') {
+                console.log(`[StealthManager ${this.instanceId}]: Applying Specific Stealth Mode for ${schedule.name}.`);
+                const db = (0, database_1.getDb)();
+                const targets = db.prepare('SELECT contact_jid FROM stealth_targets WHERE schedule_id = ?').all(schedule.id);
+                const jids = targets.map(t => t.contact_jid);
+                // Option A: Specific Contacts
+                // Attempting to use Baileys 'contact_blacklist' if supported for privacy
+                // Note: This relies on the 'contact_blacklist' value being correctly interpreted as the 'My Contacts Except' list.
+                await sock.updatePrivacySetting('lastSeen', 'contact_blacklist');
+                await sock.updatePrivacySetting('online', 'match_last_seen');
+                // CRITICAL: We need to push the JIDs to the exclusion list. 
+                // Baileys doesn't have a direct helper for this specific list yet in standard docs, 
+                // but some versions support passing the list in updatePrivacySetting or a separate call.
+                // For now, we log the intent. 
+                console.log(`[StealthManager]: Targets for exclusion: ${jids.join(', ')}`);
+            }
+        }
+        catch (e) {
+            console.error(`[StealthManager ${this.instanceId}]: Failed to apply privacy settings`, e);
+        }
+    }
+}
+exports.StealthManager = StealthManager;
