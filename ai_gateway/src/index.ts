@@ -8,6 +8,8 @@ import { RegistryManager } from './manager/RegistryManager';
 import { AiManager } from './manager/AiManager';
 import { KeyManager } from './manager/KeyManager';
 import { OAuthManager } from './manager/OAuthManager';
+import { GlobalAuthService } from './services/GlobalAuthService';
+import { identityResolver, requireAuth, requireAdmin } from './api/authMiddleware';
 import { 
     IntelligenceRequestSchema, 
     ActionRequestSchema, 
@@ -19,14 +21,16 @@ const logger = pino({
     level: process.env.LOG_LEVEL || 'info',
 });
 
-// Initialize Database
+// Initialize Database & Auth
 initDatabase();
+GlobalAuthService.init();
 
 const app = express();
 const port = 5005;
 
 app.use(cors());
 app.use(express.json());
+app.use(identityResolver);
 
 // Helper to format Zod errors
 const formatZodError = (errors: any[]) => errors.map(e => `${e.path.join('.')}: ${e.message}`).join(', ');
@@ -41,7 +45,7 @@ try {
 
 // --- Routes ---
 
-// Health Check
+// Health Check (Public)
 app.get('/health', (req, res) => {
     res.json({
         status: 'healthy',
@@ -50,9 +54,9 @@ app.get('/health', (req, res) => {
     });
 });
 
-// --- Auth Routes ---
+// --- Auth Routes (Protected) ---
 
-app.get('/auth/google/url', (req, res) => {
+app.get('/auth/google/url', requireAuth, (req, res) => {
     try {
         const url = OAuthManager.getAuthUrl();
         res.json({ success: true, data: { url } } as ApiResponse);
@@ -61,7 +65,7 @@ app.get('/auth/google/url', (req, res) => {
     }
 });
 
-app.post('/auth/google/exchange', async (req, res) => {
+app.post('/auth/google/exchange', requireAuth, async (req, res) => {
     const { code, label } = req.body;
     if (!code) return res.status(400).json({ success: false, error: 'Code is required' });
 
@@ -76,9 +80,9 @@ app.post('/auth/google/exchange', async (req, res) => {
     }
 });
 
-// --- Settings API ---
+// --- Settings API (Admin Protected) ---
 
-app.get('/settings', (req, res) => {
+app.get('/settings', requireAdmin, (req, res) => {
     const db = getDb();
     const rows = db.prepare('SELECT key, value FROM settings').all() as {key: string, value: string}[];
     const settings: Record<string, string> = {};
@@ -93,7 +97,7 @@ app.get('/settings', (req, res) => {
     res.json({ success: true, data: settings } as ApiResponse);
 });
 
-app.post('/settings', (req, res) => {
+app.post('/settings', requireAdmin, (req, res) => {
     const { key, value } = req.body;
     if (!key) return res.status(400).json({ success: false, error: 'Key is required' });
     
@@ -102,9 +106,9 @@ app.post('/settings', (req, res) => {
     res.json({ success: true } as ApiResponse);
 });
 
-// --- Key Management API ---
+// --- Key Management API (Admin Protected) ---
 
-app.get('/keys', (req, res) => {
+app.get('/keys', requireAdmin, (req, res) => {
     try {
         const keys = KeyManager.listKeys();
         res.json({ success: true, data: keys } as ApiResponse);
@@ -113,7 +117,7 @@ app.get('/keys', (req, res) => {
     }
 });
 
-app.post('/keys', (req, res) => {
+app.post('/keys', requireAdmin, (req, res) => {
     const { provider, key, label, type } = req.body;
     if (!provider || !key) {
         return res.status(400).json({ success: false, error: 'Provider and Key are required' } as ApiResponse);
@@ -126,7 +130,7 @@ app.post('/keys', (req, res) => {
     }
 });
 
-app.delete('/keys/:id', (req, res) => {
+app.delete('/keys/:id', requireAdmin, (req, res) => {
     const id = parseInt(req.params.id);
     if (isNaN(id)) return res.status(400).json({ success: false, error: 'Invalid ID' });
     
@@ -138,8 +142,8 @@ app.delete('/keys/:id', (req, res) => {
     }
 });
 
-// Registry: Add-ons check-in here
-app.post('/registry/check-in', (req, res) => {
+// Registry: Add-ons check-in here (Protected)
+app.post('/registry/check-in', requireAuth, (req, res) => {
     const result = RegistrationRequestSchema.safeParse(req.body);
     if (!result.success) {
         return res.status(400).json({ success: false, error: formatZodError(result.error.errors) } as ApiResponse);
@@ -149,13 +153,13 @@ app.post('/registry/check-in', (req, res) => {
     res.json({ success: true, data: { registered: result.data.slug } } as ApiResponse);
 });
 
-// List Registered Add-ons
-app.get('/registry/addons', (req, res) => {
+// List Registered Add-ons (Protected)
+app.get('/registry/addons', requireAuth, (req, res) => {
     res.json({ success: true, data: RegistryManager.listAddons() } as ApiResponse);
 });
 
-// Intelligence API
-app.post('/v1/process', async (req, res) => {
+// Intelligence API (Protected)
+app.post('/v1/process', requireAuth, async (req, res) => {
     const result = IntelligenceRequestSchema.safeParse(req.body);
     if (!result.success) {
         return res.status(400).json({ success: false, error: formatZodError(result.error.errors) } as ApiResponse);
@@ -170,8 +174,8 @@ app.post('/v1/process', async (req, res) => {
     }
 });
 
-// Bus Dispatch: Route requests between addons
-app.post('/bus/dispatch', async (req, res) => {
+// Bus Dispatch: Route requests between addons (Protected)
+app.post('/bus/dispatch', requireAuth, async (req, res) => {
     const result = ActionRequestSchema.safeParse(req.body);
     if (!result.success) {
         return res.status(400).json({ success: false, error: formatZodError(result.error.errors) } as ApiResponse);
