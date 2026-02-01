@@ -11,7 +11,7 @@ export interface Config {
 const OPTIONS_PATH = '/data/options.json';
 const DEFAULT_CONFIG: Config = {
   port: 5006,
-  dataDir: './data',
+  dataDir: process.platform === 'win32' ? './data' : '/data',
   jwtSecret: 'dev-secret-change-me',
   logLevel: 'info',
 };
@@ -38,14 +38,11 @@ export function loadConfig(): Config {
   
   // Ensure data dir exists
   if (!fs.existsSync(config.dataDir)) {
-      // In dev mode (Windows), ./data might not exist
-      if (process.platform === 'win32') {
-          // Use local dir
-          if (!fs.existsSync('./data')) fs.mkdirSync('./data');
-          config.dataDir = './data';
-      } else {
-          // On Linux/HA, /data should exist. If not, we can't do much.
-          console.warn('/data directory missing!');
+      console.log(`Creating data directory: ${config.dataDir}`);
+      try {
+          fs.mkdirSync(config.dataDir, { recursive: true });
+      } catch (e) {
+          console.error(`Failed to create data directory ${config.dataDir}:`, e);
       }
   }
 

@@ -13,6 +13,14 @@ export class AuthDatabase {
 
     constructor() {
         console.log(`Initializing Database at ${DB_PATH}`);
+        
+        // Extra safety: Ensure directory exists
+        const dir = path.dirname(DB_PATH);
+        if (!fs.existsSync(dir)) {
+            console.log(`Creating directory for database: ${dir}`);
+            fs.mkdirSync(dir, { recursive: true });
+        }
+
         this.db = new Database(DB_PATH);
         this.init();
     }
