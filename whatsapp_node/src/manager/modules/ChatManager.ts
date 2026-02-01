@@ -40,7 +40,7 @@ export class ChatManager {
 
     async updateGroupMetadata(jid: string, update: { subject?: string, description?: string }) {
         const normalized = normalizeJid(jid);
-        if (update.subject) await this.request(async (sock) => await sock.groupUpdateSubject(normalized, update.subject), Priority.MEDIUM);
-        if (update.description) await this.request(async (sock) => await sock.groupUpdateDescription(normalized, update.description), Priority.MEDIUM);
+        if (update.subject) await this.request(async (sock) => await sock.groupUpdateSubject(normalized, update.subject as string), Priority.MEDIUM);
+        if (update.description) await this.request(async (sock) => await sock.groupUpdateDescription(normalized, update.description as string), Priority.MEDIUM);
     }
 }
