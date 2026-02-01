@@ -24,6 +24,7 @@ import { EphemeralManager } from './modules/EphemeralManager';
 import { StealthManager } from './modules/StealthManager';
 import { ProfilePictureManager } from './modules/ProfilePictureManager';
 import { SocialManager } from './modules/SocialManager';
+import { TrafficManager, Priority } from './modules/TrafficManager';
 
 export class WhatsAppInstance {
     public id: number;
@@ -49,6 +50,7 @@ export class WhatsAppInstance {
     public profilePictureManager: ProfilePictureManager | null = null;
     public socialManager: SocialManager | null = null;
     private qrManager: QRManager;
+    private trafficManager: TrafficManager;
     
             // Health Monitor
     
@@ -85,6 +87,7 @@ export class WhatsAppInstance {
                 this.logger = pino({ level: this.debugEnabled ? 'debug' : 'info' });
     
                 this.qrManager = new QRManager();
+                this.trafficManager = new TrafficManager(id);
     
                 this.msgRetryCounterCache = new NodeCache();
     
@@ -110,6 +113,14 @@ export class WhatsAppInstance {
     
                 return this.qrManager.getQr();
     
+            }
+
+            /**
+             * Queues a request to the WhatsApp socket.
+             */
+            public async request<T>(execute: (sock: WASocket) => Promise<T>, priority: Priority = Priority.LOW): Promise<T> {
+                if (!this.sock) throw new Error("Socket not initialized");
+                return this.trafficManager.enqueue(() => execute(this.sock!), priority);
             }
     
         
@@ -235,43 +246,24 @@ export class WhatsAppInstance {
                                     this.decryptionErrorCount = 0;
     
                                     this.softWipeSyncState().then(() => this.reconnect());
-    
                                 }
-    
                                 
-    
                                 // Auto-reset counter after 2 mins if no more errors
-    
                                 setTimeout(() => { if (this.decryptionErrorCount > 0) this.decryptionErrorCount--; }, 120000);
-    
                             }
-    
         
-    
                             // Special Case: Auto-Reset on Bad MAC/Session Errors in Disconnect
-    
                             if (eventName === 'connection.update' && data.lastDisconnect?.error) {
-    
                                 const errMessage = data.lastDisconnect.error.toString();
-    
                                 if (errMessage.includes('Bad MAC') || errMessage.includes('SessionError')) {
-    
                                     console.error(`[Instance ${this.id}]: CRITICAL - Detected Session Corruption in Disconnect. Deleting Auth.`);
-    
                                     this.deleteAuth().then(() => {
-    
                                         this.status = 'disconnected';
-    
                                         this.emitStatusUpdate();
-    
                                     });
-    
                                 }
-    
                             }
-    
                         });
-    
                     }
     
     
@@ -279,35 +271,31 @@ export class WhatsAppInstance {
                 // Initialize Managers
     
                 this.messageManager = new MessageManager(
-    
                     this.id, 
-    
                     this.sock, 
-    
                     this.io, 
-    
                     this.logger, 
-    
                     (jids) => this.profilePictureManager?.enqueue(jids)
-    
                 );
-    
-                this.workerManager = new WorkerManager(this.id, this.sock, () => this.status, () => this.reconnect());
-    
-                this.chatManager = new ChatManager(this.id, this.sock, this.io);
-    
+                
+                this.workerManager = new WorkerManager(
+                    this.id, 
+                    this.request.bind(this), 
+                    () => this.status, 
+                    () => this.reconnect(),
+                    this.trafficManager
+                );
+                
+                this.chatManager = new ChatManager(this.id, this.request.bind(this), this.io);
+                
                 this.ephemeralManager = new EphemeralManager(this.id, this.sock, this.io);
-    
                 this.ephemeralManager.start();
-    
-                this.stealthManager = new StealthManager(this.id, this.sock);
-    
+                
+                this.stealthManager = new StealthManager(this.id, this.request.bind(this));
                 this.stealthManager.start();
-    
-                this.profilePictureManager = new ProfilePictureManager(this.id, this.sock);
-    
+                
+                this.profilePictureManager = new ProfilePictureManager(this.id, this.request.bind(this), this.trafficManager);
                 this.socialManager = new SocialManager(this.id);
-    
                 // ProfilePictureManager starts on demand via enqueue
     
     
@@ -540,7 +528,7 @@ export class WhatsAppInstance {
 
     async sendMessage(jid: string, text: string) {
         if (!this.sock || this.status !== 'connected') throw new Error("Instance not connected");
-        await this.sock.sendMessage(normalizeJid(jid), { text });
+        await this.request(async (sock) => await sock.sendMessage(normalizeJid(jid), { text }), Priority.HIGH);
     }
 
     // Delegated methods

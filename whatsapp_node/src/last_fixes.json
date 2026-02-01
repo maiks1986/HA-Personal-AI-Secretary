@@ -1,10 +1,14 @@
 {
-  "timestamp": "2026-02-01T15:00:00.000Z",
-  "description": "Bumped version to 1.9.1.0059. Fixed Sidebar last message preview logic by ensuring 'last_message_text' and 'last_message_timestamp' are only updated when a truly newer message is received, preventing historical syncs from overwriting the latest message. Also optimized the API query to use these fields directly instead of unreliable 'MAX' aggregators on text fields.",
+  "timestamp": "2026-02-01T15:30:00.000Z",
+  "description": "Bumped version to 1.9.1.0060. Implemented a centralized prioritized request queue (TrafficManager) to throttle and prioritize all WhatsApp interactions. Optimized background sync loops (naming and history workers) with rate limits and adaptive backoff based on queue size to prevent connection overloading.",
   "modules_affected": [
-    "whatsapp_node/src/manager/modules/MessageManager.ts",
-    "whatsapp_node/src/api/routes/messaging.ts",
-    "whatsapp_node/package.json",
-    "whatsapp_node/src/last_fixes.json"
+    "src/manager/modules/TrafficManager.ts",
+    "src/manager/modules/WorkerManager.ts",
+    "src/manager/modules/ProfilePictureManager.ts",
+    "src/manager/modules/ChatManager.ts",
+    "src/manager/modules/StealthManager.ts",
+    "src/manager/WhatsAppInstance.ts",
+    "package.json",
+    "src/last_fixes.json"
   ]
 }

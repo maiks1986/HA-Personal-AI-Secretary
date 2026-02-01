@@ -4,6 +4,7 @@ import { normalizeJid } from '../../utils';
 import fs from 'fs';
 import path from 'path';
 import axios from 'axios';
+import { Priority, TrafficManager } from './TrafficManager';
 
 export class ProfilePictureManager {
     private queue: Set<string> = new Set();
@@ -11,7 +12,11 @@ export class ProfilePictureManager {
     private processing = false;
     private avatarDir: string;
 
-    constructor(private instanceId: number, private sock: WASocket) {
+    constructor(
+        private instanceId: number, 
+        private request: <T>(execute: (sock: WASocket) => Promise<T>, priority?: Priority) => Promise<T>,
+        private traffic: TrafficManager
+    ) {
         this.avatarDir = process.env.NODE_ENV === 'development' 
             ? path.join(__dirname, '../../../../media/avatars') 
             : '/data/media/avatars';
@@ -26,13 +31,18 @@ export class ProfilePictureManager {
 
     public start() {
         if (this.interval) return;
-        // Process 1 item every 2 seconds
-        this.interval = setInterval(() => this.processNext(), 2000);
+        const runNext = async () => {
+            await this.processNext();
+            const baseDelay = 5000;
+            const nextDelay = this.traffic.getAdaptiveDelay(baseDelay);
+            this.interval = setTimeout(runNext, nextDelay);
+        };
+        runNext();
         console.log(`[ProfilePictureManager ${this.instanceId}]: Started worker.`);
     }
 
     public stop() {
-        if (this.interval) clearInterval(this.interval);
+        if (this.interval) clearTimeout(this.interval);
         this.interval = null;
     }
 
@@ -77,11 +87,11 @@ export class ProfilePictureManager {
             // TRY PREVIEW FIRST (Much more likely to succeed for individuals)
             let url = null;
             try {
-                url = await this.sock.profilePictureUrl(jid, 'preview');
+                url = await this.request(async (sock) => await sock.profilePictureUrl(jid, 'preview'), Priority.LOW);
             } catch (e) {
                 // If preview fails, try high-res just in case
                 try {
-                    url = await this.sock.profilePictureUrl(jid, 'image');
+                    url = await this.request(async (sock) => await sock.profilePictureUrl(jid, 'image'), Priority.LOW);
                 } catch (e2) {}
             }
             
