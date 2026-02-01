@@ -1,0 +1,22 @@
+name: "Identity Gate"
+version: "0.0.1.0001"
+slug: "auth_node"
+description: "Centralized Authentication & Authorization Service"
+url: "https://github.com/your-repo"
+startup: application
+arch:
+  - aarch64
+  - amd64
+  - armv7
+map:
+  - "config:rw"
+options:
+  log_level: "info"
+schema:
+  log_level: "list(debug,info,warning,error,fatal)"
+ports:
+  5006/tcp: 5006
+ingress: true
+ingress_port: 5006
+ingress_entry: /
+panel_icon: mdi:shield-lock
