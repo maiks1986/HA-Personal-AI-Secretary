@@ -3,7 +3,7 @@ import cors from 'cors';
 import pino from 'pino';
 import { readFileSync } from 'fs';
 import { join } from 'path';
-import { initDatabase } from './db/database';
+import { initDatabase, getDb } from './db/database';
 import { RegistryManager } from './manager/RegistryManager';
 import { AiManager } from './manager/AiManager';
 import { KeyManager } from './manager/KeyManager';
@@ -27,6 +27,9 @@ const port = 5005;
 
 app.use(cors());
 app.use(express.json());
+
+// Helper to format Zod errors
+const formatZodError = (errors: any[]) => errors.map(e => `${e.path.join('.')}: ${e.message}`).join(', ');
 
 // Load last fixes for health check
 let lastFixes = { timestamp: '', description: '' };
@@ -139,7 +142,7 @@ app.delete('/keys/:id', (req, res) => {
 app.post('/registry/check-in', (req, res) => {
     const result = RegistrationRequestSchema.safeParse(req.body);
     if (!result.success) {
-        return res.status(400).json({ success: false, error: result.error.errors } as ApiResponse);
+        return res.status(400).json({ success: false, error: formatZodError(result.error.errors) } as ApiResponse);
     }
 
     RegistryManager.registerAddon(result.data);
@@ -155,7 +158,7 @@ app.get('/registry/addons', (req, res) => {
 app.post('/v1/process', async (req, res) => {
     const result = IntelligenceRequestSchema.safeParse(req.body);
     if (!result.success) {
-        return res.status(400).json({ success: false, error: result.error.errors } as ApiResponse);
+        return res.status(400).json({ success: false, error: formatZodError(result.error.errors) } as ApiResponse);
     }
 
     try {
@@ -171,7 +174,7 @@ app.post('/v1/process', async (req, res) => {
 app.post('/bus/dispatch', async (req, res) => {
     const result = ActionRequestSchema.safeParse(req.body);
     if (!result.success) {
-        return res.status(400).json({ success: false, error: result.error.errors } as ApiResponse);
+        return res.status(400).json({ success: false, error: formatZodError(result.error.errors) } as ApiResponse);
     }
 
     const { target, action, payload } = result.data;
