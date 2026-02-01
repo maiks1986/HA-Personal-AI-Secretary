@@ -1,4 +1,4 @@
 {
-  "timestamp": "2026-02-01T16:50:00Z",
-  "description": "Fixed API_BASE in frontend to handle Ingress subpaths dynamically. Bumped version to 0.0.1.0008."
+  "timestamp": "2026-02-01T17:10:00Z",
+  "description": "Removed OAuth editing from UI. OAuth settings are now read-only in the dashboard and must be managed via HA Add-on options. Bumped version to 0.0.1.0010."
 }

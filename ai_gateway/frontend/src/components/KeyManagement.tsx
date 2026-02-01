@@ -12,7 +12,6 @@ export function KeyManagement() {
     
     // Settings State
     const [clientId, setClientId] = useState('');
-    const [clientSecret, setClientSecret] = useState('');
     const [redirectUri, setRedirectUri] = useState('');
 
     const fetchKeys = async () => {
@@ -26,8 +25,7 @@ export function KeyManagement() {
         const res = await api.getSettings();
         if (res.success && res.data) {
             setClientId(res.data.google_client_id || '');
-            setClientSecret(res.data.google_client_secret || '');
-            setRedirectUri(res.data.google_redirect_uri || window.location.origin);
+            setRedirectUri(res.data.google_redirect_uri || '');
         }
     };
 
@@ -60,23 +58,16 @@ export function KeyManagement() {
         }
     };
 
-    const saveSettings = async () => {
-        await api.updateSetting('google_client_id', clientId);
-        await api.updateSetting('google_client_secret', clientSecret);
-        await api.updateSetting('google_redirect_uri', redirectUri);
-        setShowSettings(false);
-    };
-
     const startOAuth = async () => {
         try {
             const res = await api.getAuthUrl();
             if (res.success && res.data?.url) {
                 window.location.href = res.data.url;
             } else {
-                alert('Could not generate Auth URL. Check settings.');
+                alert('Could not generate Auth URL. Ensure Client ID/Secret are configured in Add-on Settings.');
             }
         } catch (e) {
-            alert('Failed to start OAuth. Configure Client ID/Secret first.');
+            alert('Failed to start OAuth. Configure Client ID/Secret in Add-on Settings first.');
         }
     };
 
@@ -92,26 +83,26 @@ export function KeyManagement() {
                 </button>
             </div>
 
-            {/* OAuth Config Modal */}
+            {/* OAuth Config View (Read Only) */}
             {showSettings && (
                 <div className="absolute inset-0 bg-gray-900/95 z-10 p-6 rounded-2xl flex flex-col justify-center">
-                    <h3 className="text-lg font-bold mb-4 text-white">Google OAuth Settings</h3>
+                    <h3 className="text-lg font-bold mb-4 text-white">Google OAuth Configuration</h3>
+                    <p className="text-xs text-gray-400 mb-4">These settings are managed in the Home Assistant Add-on Configuration tab.</p>
                     <div className="space-y-4">
                         <div>
                             <label className="block text-xs text-gray-500 mb-1">Client ID</label>
-                            <input type="text" value={clientId} onChange={e => setClientId(e.target.value)} className="w-full bg-gray-800 border border-gray-600 rounded p-2 text-white" />
+                            <input type="text" value={clientId} readOnly className="w-full bg-gray-800 border border-gray-700 rounded p-2 text-gray-400 cursor-not-allowed" />
                         </div>
                         <div>
                             <label className="block text-xs text-gray-500 mb-1">Client Secret</label>
-                            <input type="password" value={clientSecret} onChange={e => setClientSecret(e.target.value)} className="w-full bg-gray-800 border border-gray-600 rounded p-2 text-white" />
+                            <input type="text" value="********" readOnly className="w-full bg-gray-800 border border-gray-700 rounded p-2 text-gray-400 cursor-not-allowed" />
                         </div>
                         <div>
-                            <label className="block text-xs text-gray-500 mb-1">Redirect URI (Must match GCP Console)</label>
-                            <input type="text" value={redirectUri} onChange={e => setRedirectUri(e.target.value)} className="w-full bg-gray-800 border border-gray-600 rounded p-2 text-white" />
+                            <label className="block text-xs text-gray-500 mb-1">Redirect URI</label>
+                            <input type="text" value={redirectUri} readOnly className="w-full bg-gray-800 border border-gray-700 rounded p-2 text-gray-400 cursor-not-allowed" />
                         </div>
-                        <div className="flex justify-end gap-2 mt-4">
-                            <button onClick={() => setShowSettings(false)} className="px-4 py-2 text-gray-400 hover:text-white">Cancel</button>
-                            <button onClick={saveSettings} className="px-4 py-2 bg-indigo-600 text-white rounded hover:bg-indigo-700">Save</button>
+                        <div className="flex justify-end mt-4">
+                            <button onClick={() => setShowSettings(false)} className="px-6 py-2 bg-gray-700 text-white rounded hover:bg-gray-600">Close</button>
                         </div>
                     </div>
                 </div>
