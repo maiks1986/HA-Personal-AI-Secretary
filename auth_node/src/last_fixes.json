@@ -1,4 +1,4 @@
 {
-  "timestamp": "2026-02-01T14:55:00Z",
-  "description": "Fixed API endpoint path in App.tsx by removing leading slash, ensuring compatibility with Home Assistant Ingress subpaths. Bumped version to 1.0.0.0006."
+  "timestamp": "2026-02-01T15:15:00Z",
+  "description": "Bumped version to 1.0.0.0007. Updated API paths to use './api/auth/login' and added backend request logging for debugging Ingress issues."
 }
