@@ -1,6 +1,6 @@
 {
   "name": "auth-gate-node",
-  "version": "0.0.1.0001",
+  "version": "1.0.0.0001",
   "description": "Identity Gate - Authentication & Authorization Service",
   "main": "dist/index.js",
   "scripts": {
