@@ -81,7 +81,7 @@ authManager.loadTokens().then(loaded => {
 app.get('/health', (req, res) => {
     res.json({
         status: 'ok',
-        version: '1.0.0.0010',
+        version: '1.0.0.0011',
         authorized: authManager.isAuthorized()
     });
 });
