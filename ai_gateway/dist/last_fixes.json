@@ -1,4 +1,4 @@
 {
-  "timestamp": "2026-02-01T16:15:00Z",
-  "description": "Added google_client_id and google_client_secret to HA options and implemented sync to internal database settings. Bumped version to 0.0.1.0006."
+  "timestamp": "2026-02-01T16:30:00Z",
+  "description": "Added google_redirect_uri to HA options and synced to database. Bumped version to 0.0.1.0007."
 }

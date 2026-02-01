@@ -27,6 +27,10 @@ export function loadAndSyncConfig() {
                 db.prepare('INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value')
                     .run('google_client_secret', options.google_client_secret);
             }
+            if (options.google_redirect_uri) {
+                db.prepare('INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value')
+                    .run('google_redirect_uri', options.google_redirect_uri);
+            }
             
             logger.info('AI Gateway: Synced HA options to database settings.');
         } catch (e: any) {
