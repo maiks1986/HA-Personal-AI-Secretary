@@ -1,7 +1,7 @@
 import axios from 'axios';
 import { ApiResponse } from '../types/shared_schemas';
 
-const API_BASE = '/';
+const API_BASE = window.location.pathname.replace(/\/+$/, '') + '/';
 
 export const api = {
     getHealth: async () => {

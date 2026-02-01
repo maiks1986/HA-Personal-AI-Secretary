@@ -1,4 +1,4 @@
 {
-  "timestamp": "2026-02-01T16:30:00Z",
-  "description": "Added google_redirect_uri to HA options and synced to database. Bumped version to 0.0.1.0007."
+  "timestamp": "2026-02-01T16:50:00Z",
+  "description": "Fixed API_BASE in frontend to handle Ingress subpaths dynamically. Bumped version to 0.0.1.0008."
 }
