@@ -1,22 +1,29 @@
-# Stage 1: Build Frontend (Placeholder - will be implemented soon)
+# Stage 1: Build Frontend
 FROM node:20-alpine AS build-frontend
 WORKDIR /app/frontend
-# For now, we'll just create a dummy index.html in dist/public
-RUN mkdir -p /app/dist/public && echo "<h1>AI Gateway Dashboard</h1>" > /app/dist/public/index.html
+COPY frontend/package*.json ./
+RUN npm install
+COPY frontend/ ./
+COPY src/shared_schemas.ts ../src/
+RUN npm run build
 
 # Stage 2: Build Backend
 FROM node:20-alpine
 RUN apk add --no-cache python3 make g++ git
 
 WORKDIR /app
-COPY package.json tsconfig.json ./
+COPY package*.json tsconfig.json ./
 RUN npm install
 
 COPY src ./src
 RUN npm run build
 
-# Copy dummy frontend (will be replaced by real build later)
+# Copy real built frontend
 COPY --from=build-frontend /app/dist/public ./dist/public
+
+ENV NODE_ENV=production
+EXPOSE 5005
+CMD ["npm", "start"]
 
 ENV NODE_ENV=production
 EXPOSE 5005
