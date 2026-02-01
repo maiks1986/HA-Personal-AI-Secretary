@@ -20,11 +20,24 @@ class CalendarDatabase {
     db;
     constructor() {
         const dir = path_1.default.dirname(DB_PATH);
+        console.log(`[DB] Using database path: ${DB_PATH}`);
         if (!fs_1.default.existsSync(dir)) {
-            fs_1.default.mkdirSync(dir, { recursive: true });
+            console.log(`[DB] Creating directory: ${dir}`);
+            try {
+                fs_1.default.mkdirSync(dir, { recursive: true });
+            }
+            catch (err) {
+                console.error(`[DB] Failed to create directory ${dir}:`, err);
+            }
         }
-        this.db = new better_sqlite3_1.default(DB_PATH);
-        this.init();
+        try {
+            this.db = new better_sqlite3_1.default(DB_PATH);
+            this.init();
+        }
+        catch (err) {
+            console.error(`[DB] CRITICAL: Failed to open database at ${DB_PATH}:`, err);
+            throw err;
+        }
     }
     init() {
         this.db.exec(`

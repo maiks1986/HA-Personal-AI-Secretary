@@ -45,7 +45,9 @@ catch (err) {
     logger.warn('Could not load last_fixes.json');
 }
 // Initialize Global Auth
-GlobalAuthService_1.GlobalAuthService.init();
+GlobalAuthService_1.GlobalAuthService.init().catch(err => {
+    logger.error(err, 'GlobalAuthService initialization failed');
+});
 app.use((0, cors_1.default)());
 app.use(express_1.default.json());
 app.use(auth_1.authMiddleware);
@@ -54,25 +56,32 @@ authManager.loadTokens().then(loaded => {
     if (loaded) {
         logger.info('Google Calendar tokens loaded');
         // Ensure instance is in DB
-        db.saveInstance({
-            id: MAIN_INSTANCE_ID,
-            name: 'Main Google Account',
-            type: 'google',
-            config: {},
-            is_active: true
-        });
-        // Initial sync
-        calendarManager.syncAll().catch((err) => logger.error(err, 'Initial sync failed'));
+        try {
+            db.saveInstance({
+                id: MAIN_INSTANCE_ID,
+                name: 'Main Google Account',
+                type: 'google',
+                config: {},
+                is_active: true
+            });
+            // Initial sync
+            calendarManager.syncAll().catch((err) => logger.error(err, 'Initial sync failed'));
+        }
+        catch (dbErr) {
+            logger.error(dbErr, 'Failed to save initial instance to DB');
+        }
     }
     else {
         logger.warn('No Google Calendar tokens found. Authentication required.');
     }
+}).catch(err => {
+    logger.error(err, 'Failed to load tokens');
 });
 // Basic Health Check
 app.get('/health', (req, res) => {
     res.json({
         status: 'ok',
-        version: '1.0.0.0008',
+        version: '1.0.0.0010',
         authorized: authManager.isAuthorized()
     });
 });
@@ -191,4 +200,19 @@ if (process.env.NODE_ENV === 'production') {
 }
 app.listen(PORT, () => {
     logger.info(`Calendar Master running on port ${PORT}`);
+}).on('error', (err) => {
+    if (err.code === 'EADDRINUSE') {
+        logger.error(`Port ${PORT} is already in use. Please check other add-ons.`);
+    }
+    else {
+        logger.error(err, 'Server failed to start');
+    }
+    process.exit(1);
+});
+process.on('unhandledRejection', (reason, promise) => {
+    logger.error({ promise, reason }, 'Unhandled Rejection at Promise');
+});
+process.on('uncaughtException', (err) => {
+    logger.error(err, 'Uncaught Exception thrown');
+    process.exit(1);
 });

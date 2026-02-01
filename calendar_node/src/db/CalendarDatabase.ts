@@ -18,12 +18,23 @@ export class CalendarDatabase {
 
   constructor() {
     const dir = path.dirname(DB_PATH);
+    console.log(`[DB] Using database path: ${DB_PATH}`);
     if (!fs.existsSync(dir)) {
-      fs.mkdirSync(dir, { recursive: true });
+      console.log(`[DB] Creating directory: ${dir}`);
+      try {
+        fs.mkdirSync(dir, { recursive: true });
+      } catch (err) {
+        console.error(`[DB] Failed to create directory ${dir}:`, err);
+      }
     }
 
-    this.db = new Database(DB_PATH);
-    this.init();
+    try {
+      this.db = new Database(DB_PATH);
+      this.init();
+    } catch (err) {
+      console.error(`[DB] CRITICAL: Failed to open database at ${DB_PATH}:`, err);
+      throw err;
+    }
   }
 
   private init() {
