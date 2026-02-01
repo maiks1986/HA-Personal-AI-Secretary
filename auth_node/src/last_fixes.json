@@ -1,4 +1,4 @@
 {
-  "timestamp": "2026-02-01T15:15:00Z",
-  "description": "Bumped version to 1.0.0.0007. Updated API paths to use './api/auth/login' and added backend request logging for debugging Ingress issues."
+  "timestamp": "2026-02-01T15:35:00Z",
+  "description": "Implemented dynamic API URL calculation in App.tsx to ensure reliable routing through Home Assistant Ingress, avoiding double slashes. Bumped version to 1.0.0.0008."
 }
