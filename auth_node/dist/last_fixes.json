@@ -1,4 +1,4 @@
 {
-  "timestamp": "2026-02-01T17:55:00Z",
-  "description": "Bumped version to 1.0.0.0012. Final verification of User Management and Ingress pathing."
+  "timestamp": "2026-02-01T18:45:00Z",
+  "description": "Final bump to 1.0.0.0013 for Auth Node to ensure Home Assistant triggers the update for User Management and routing fixes."
 }
