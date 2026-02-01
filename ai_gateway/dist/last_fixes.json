@@ -1,4 +1,4 @@
 {
-  "timestamp": "2026-02-01T13:05:00Z",
-  "description": "Fixed GlobalAuthService to support internal DNS (a0d7b954-auth-node) when running in production environment."
+  "timestamp": "2026-02-01T16:15:00Z",
+  "description": "Added google_client_id and google_client_secret to HA options and implemented sync to internal database settings. Bumped version to 0.0.1.0006."
 }

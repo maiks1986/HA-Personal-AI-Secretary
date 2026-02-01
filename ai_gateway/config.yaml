@@ -1,5 +1,5 @@
 name: "AI Gateway"
-version: "0.0.1.0005"
+version: "0.0.1.0006"
 slug: "ai_gateway"
 description: "Centralized Intelligence & Routing for the Personal Secretary Ecosystem"
 arch:
@@ -14,10 +14,14 @@ options:
   debug_logging: false
   gemini_api_key: "key1,key2,key3"
   internal_api_key: "change_me_please"
+  google_client_id: ""
+  google_client_secret: ""
 schema:
   debug_logging: bool?
   gemini_api_key: str?
   internal_api_key: password?
+  google_client_id: str?
+  google_client_secret: str?
 ingress: true
 ingress_port: 5005
 ingress_entry: /

@@ -4,17 +4,18 @@ import pino from 'pino';
 import { readFileSync } from 'fs';
 import { join } from 'path';
 import { initDatabase, getDb } from './db/database';
+import { loadAndSyncConfig } from './config';
 import { RegistryManager } from './manager/RegistryManager';
 import { AiManager } from './manager/AiManager';
 import { KeyManager } from './manager/KeyManager';
 import { OAuthManager } from './manager/OAuthManager';
 import { GlobalAuthService } from './services/GlobalAuthService';
 import { identityResolver, requireAuth, requireAdmin } from './api/authMiddleware';
-import { 
-    IntelligenceRequestSchema, 
-    ActionRequestSchema, 
-    RegistrationRequestSchema, 
-    ApiResponse 
+import {
+    IntelligenceRequestSchema,
+    ActionRequestSchema,
+    RegistrationRequestSchema,
+    ApiResponse
 } from './shared_schemas';
 
 const logger = pino({
@@ -23,8 +24,8 @@ const logger = pino({
 
 // Initialize Database & Auth
 initDatabase();
+loadAndSyncConfig();
 GlobalAuthService.init();
-
 const app = express();
 const port = 5005;
 

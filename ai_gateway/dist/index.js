@@ -9,20 +9,26 @@ const pino_1 = __importDefault(require("pino"));
 const fs_1 = require("fs");
 const path_1 = require("path");
 const database_1 = require("./db/database");
+const config_1 = require("./config");
 const RegistryManager_1 = require("./manager/RegistryManager");
 const AiManager_1 = require("./manager/AiManager");
 const KeyManager_1 = require("./manager/KeyManager");
 const OAuthManager_1 = require("./manager/OAuthManager");
+const GlobalAuthService_1 = require("./services/GlobalAuthService");
+const authMiddleware_1 = require("./api/authMiddleware");
 const shared_schemas_1 = require("./shared_schemas");
 const logger = (0, pino_1.default)({
     level: process.env.LOG_LEVEL || 'info',
 });
-// Initialize Database
+// Initialize Database & Auth
 (0, database_1.initDatabase)();
+(0, config_1.loadAndSyncConfig)();
+GlobalAuthService_1.GlobalAuthService.init();
 const app = (0, express_1.default)();
 const port = 5005;
 app.use((0, cors_1.default)());
 app.use(express_1.default.json());
+app.use(authMiddleware_1.identityResolver);
 // Helper to format Zod errors
 const formatZodError = (errors) => errors.map(e => `${e.path.join('.')}: ${e.message}`).join(', ');
 // Load last fixes for health check
@@ -34,7 +40,7 @@ catch (e) {
     logger.warn('Could not load last_fixes.json');
 }
 // --- Routes ---
-// Health Check
+// Health Check (Public)
 app.get('/health', (req, res) => {
     res.json({
         status: 'healthy',
@@ -42,8 +48,8 @@ app.get('/health', (req, res) => {
         last_fix: lastFixes
     });
 });
-// --- Auth Routes ---
-app.get('/auth/google/url', (req, res) => {
+// --- Auth Routes (Protected) ---
+app.get('/auth/google/url', authMiddleware_1.requireAuth, (req, res) => {
     try {
         const url = OAuthManager_1.OAuthManager.getAuthUrl();
         res.json({ success: true, data: { url } });
@@ -52,7 +58,7 @@ app.get('/auth/google/url', (req, res) => {
         res.status(500).json({ success: false, error: e.message });
     }
 });
-app.post('/auth/google/exchange', async (req, res) => {
+app.post('/auth/google/exchange', authMiddleware_1.requireAuth, async (req, res) => {
     const { code, label } = req.body;
     if (!code)
         return res.status(400).json({ success: false, error: 'Code is required' });
@@ -67,8 +73,8 @@ app.post('/auth/google/exchange', async (req, res) => {
         res.status(500).json({ success: false, error: e.message });
     }
 });
-// --- Settings API ---
-app.get('/settings', (req, res) => {
+// --- Settings API (Admin Protected) ---
+app.get('/settings', authMiddleware_1.requireAdmin, (req, res) => {
     const db = (0, database_1.getDb)();
     const rows = db.prepare('SELECT key, value FROM settings').all();
     const settings = {};
@@ -83,7 +89,7 @@ app.get('/settings', (req, res) => {
     });
     res.json({ success: true, data: settings });
 });
-app.post('/settings', (req, res) => {
+app.post('/settings', authMiddleware_1.requireAdmin, (req, res) => {
     const { key, value } = req.body;
     if (!key)
         return res.status(400).json({ success: false, error: 'Key is required' });
@@ -91,8 +97,8 @@ app.post('/settings', (req, res) => {
     db.prepare('INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value').run(key, value);
     res.json({ success: true });
 });
-// --- Key Management API ---
-app.get('/keys', (req, res) => {
+// --- Key Management API (Admin Protected) ---
+app.get('/keys', authMiddleware_1.requireAdmin, (req, res) => {
     try {
         const keys = KeyManager_1.KeyManager.listKeys();
         res.json({ success: true, data: keys });
@@ -101,7 +107,7 @@ app.get('/keys', (req, res) => {
         res.status(500).json({ success: false, error: e.message });
     }
 });
-app.post('/keys', (req, res) => {
+app.post('/keys', authMiddleware_1.requireAdmin, (req, res) => {
     const { provider, key, label, type } = req.body;
     if (!provider || !key) {
         return res.status(400).json({ success: false, error: 'Provider and Key are required' });
@@ -114,7 +120,7 @@ app.post('/keys', (req, res) => {
         res.status(500).json({ success: false, error: e.message });
     }
 });
-app.delete('/keys/:id', (req, res) => {
+app.delete('/keys/:id', authMiddleware_1.requireAdmin, (req, res) => {
     const id = parseInt(req.params.id);
     if (isNaN(id))
         return res.status(400).json({ success: false, error: 'Invalid ID' });
@@ -126,8 +132,8 @@ app.delete('/keys/:id', (req, res) => {
         res.status(500).json({ success: false, error: e.message });
     }
 });
-// Registry: Add-ons check-in here
-app.post('/registry/check-in', (req, res) => {
+// Registry: Add-ons check-in here (Protected)
+app.post('/registry/check-in', authMiddleware_1.requireAuth, (req, res) => {
     const result = shared_schemas_1.RegistrationRequestSchema.safeParse(req.body);
     if (!result.success) {
         return res.status(400).json({ success: false, error: formatZodError(result.error.errors) });
@@ -135,12 +141,12 @@ app.post('/registry/check-in', (req, res) => {
     RegistryManager_1.RegistryManager.registerAddon(result.data);
     res.json({ success: true, data: { registered: result.data.slug } });
 });
-// List Registered Add-ons
-app.get('/registry/addons', (req, res) => {
+// List Registered Add-ons (Protected)
+app.get('/registry/addons', authMiddleware_1.requireAuth, (req, res) => {
     res.json({ success: true, data: RegistryManager_1.RegistryManager.listAddons() });
 });
-// Intelligence API
-app.post('/v1/process', async (req, res) => {
+// Intelligence API (Protected)
+app.post('/v1/process', authMiddleware_1.requireAuth, async (req, res) => {
     const result = shared_schemas_1.IntelligenceRequestSchema.safeParse(req.body);
     if (!result.success) {
         return res.status(400).json({ success: false, error: formatZodError(result.error.errors) });
@@ -154,8 +160,8 @@ app.post('/v1/process', async (req, res) => {
         res.status(500).json({ success: false, error: error.message });
     }
 });
-// Bus Dispatch: Route requests between addons
-app.post('/bus/dispatch', async (req, res) => {
+// Bus Dispatch: Route requests between addons (Protected)
+app.post('/bus/dispatch', authMiddleware_1.requireAuth, async (req, res) => {
     const result = shared_schemas_1.ActionRequestSchema.safeParse(req.body);
     if (!result.success) {
         return res.status(400).json({ success: false, error: formatZodError(result.error.errors) });

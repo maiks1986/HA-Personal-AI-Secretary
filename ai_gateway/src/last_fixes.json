@@ -1,4 +1,4 @@
 {
-  "timestamp": "2026-02-01T13:30:00Z",
-  "description": "Fixed Dockerfile to actually build the frontend instead of using a placeholder 'AI Gateway Dashboard' header."
+  "timestamp": "2026-02-01T16:15:00Z",
+  "description": "Added google_client_id and google_client_secret to HA options and implemented sync to internal database settings. Bumped version to 0.0.1.0006."
 }
