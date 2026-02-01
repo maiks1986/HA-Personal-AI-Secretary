@@ -198,5 +198,27 @@ export const systemRouter = () => {
         res.json({ success: true });
     });
 
+    router.get('/backups', requireAuth, (req, res) => {
+        const backupDir = process.env.NODE_ENV === 'development' ? './backups' : '/data/backups';
+        if (!fs.existsSync(backupDir)) return res.json([]);
+        const files = fs.readdirSync(backupDir).map(file => {
+            const stats = fs.statSync(path.join(backupDir, file));
+            return { name: file, size: stats.size, created: stats.birthtime };
+        });
+        res.json(files.sort((a, b) => b.created.getTime() - a.created.getTime()));
+    });
+
+    router.get('/backups/:filename', requireAuth, (req, res) => {
+        const { filename } = req.params;
+        // Simple sanitization
+        if (filename.includes('..') || !filename.endsWith('.db')) return res.status(403).send("Invalid filename");
+        
+        const backupDir = process.env.NODE_ENV === 'development' ? './backups' : '/data/backups';
+        const filePath = path.join(backupDir, filename);
+        if (!fs.existsSync(filePath)) return res.status(404).send("File not found");
+        
+        res.download(filePath);
+    });
+
     return router;
 };

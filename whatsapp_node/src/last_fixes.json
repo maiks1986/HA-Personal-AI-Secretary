@@ -1,8 +1,9 @@
 {
-  "timestamp": "2026-02-01T10:00:00.000Z",
-  "description": "Bumped version to 1.9.1.0056. Added Safety Backup to the Repair/Zombie protocol. Before wiping any data, the system now automatically archives the full 'whatsapp.db' to '/data/backups/', ensuring no historical data is lost even if the re-sync fails.",
+  "timestamp": "2026-02-01T11:00:00.000Z",
+  "description": "Bumped version to 1.9.1.0057. Added 'Backups' tab to the System Debugger UI, allowing users to list and download the automatic safety backups created during repair operations.",
   "modules_affected": [
     "whatsapp_node/src/api/routes/system.ts",
+    "whatsapp_node/frontend/src/Debug.tsx",
     "whatsapp_node/config.yaml",
     "whatsapp_node/package.json",
     "whatsapp_node/src/last_fixes.json"

@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { io } from 'socket.io-client';
 import axios from 'axios';
-import { Terminal, X, Pause, Play, History } from 'lucide-react';
+import { Terminal, X, Pause, Play, History, Database, Download } from 'lucide-react';
 
 const socket = io();
 
@@ -14,7 +14,7 @@ const getBaseUrl = () => {
 };
 
 const Debug = ({ onClose }: { onClose: () => void }) => {
-    const [activeTab, setActiveTab] = useState<'events' | 'database'>('events');
+    const [activeTab, setActiveTab] = useState<'events' | 'database' | 'backups'>('events');
     const [events, setEvents] = useState<any[]>([]);
     const [isPaused, setIsPaused] = useState(false);
     const [lineLimit, setLineLimit] = useState(50);
@@ -24,6 +24,9 @@ const Debug = ({ onClose }: { onClose: () => void }) => {
     const [dbTable, setDbTable] = useState('messages');
     const [dbData, setDbData] = useState<any[]>([]);
     const [dbOffset, setDbOffset] = useState(0);
+
+    // Backups state
+    const [backups, setBackups] = useState<any[]>([]);
 
     const scrollRef = useRef<HTMLDivElement>(null);
     const BASE = getBaseUrl();
@@ -51,8 +54,20 @@ const Debug = ({ onClose }: { onClose: () => void }) => {
         } catch (e) { alert("Failed to fetch DB data"); } finally { setIsLoading(false); }
     };
 
+    const fetchBackups = async () => {
+        try {
+            const res = await axios.get(`${BASE}/backups`);
+            setBackups(res.data);
+        } catch (e) { alert("Failed to fetch backups"); }
+    };
+
+    const downloadBackup = (filename: string) => {
+        window.open(`${BASE}/backups/${filename}`, '_blank');
+    };
+
     useEffect(() => {
         if (activeTab === 'database') fetchDbData(true);
+        if (activeTab === 'backups') fetchBackups();
     }, [dbTable, activeTab]);
 
     useEffect(() => {
@@ -86,10 +101,11 @@ const Debug = ({ onClose }: { onClose: () => void }) => {
                     <div className="flex bg-slate-700 p-1 rounded-xl">
                         <button onClick={() => setActiveTab('events')} className={`px-4 py-1.5 rounded-lg text-[10px] font-black uppercase transition-all ${activeTab === 'events' ? 'bg-teal-600 text-white shadow-lg' : 'text-slate-400 hover:text-white'}`}>Live Events</button>
                         <button onClick={() => setActiveTab('database')} className={`px-4 py-1.5 rounded-lg text-[10px] font-black uppercase transition-all ${activeTab === 'database' ? 'bg-teal-600 text-white shadow-lg' : 'text-slate-400 hover:text-white'}`}>DB Browser</button>
+                        <button onClick={() => setActiveTab('backups')} className={`px-4 py-1.5 rounded-lg text-[10px] font-black uppercase transition-all ${activeTab === 'backups' ? 'bg-teal-600 text-white shadow-lg' : 'text-slate-400 hover:text-white'}`}>Backups</button>
                     </div>
                 </div>
                 <div className="flex items-center gap-2">
-                    {activeTab === 'events' ? (
+                    {activeTab === 'events' && (
                         <>
                             <select value={lineLimit} onChange={(e) => setLineLimit(parseInt(e.target.value))} className="bg-slate-700 text-white text-[10px] font-bold outline-none px-2 py-1.5 rounded-lg">
                                 <option value="50">50 Lines</option><option value="100">100 Lines</option><option value="200">200 Lines</option>
@@ -101,7 +117,8 @@ const Debug = ({ onClose }: { onClose: () => void }) => {
                                 {isPaused ? <Play size={18} /> : <Pause size={18} />}
                             </button>
                         </>
-                    ) : (
+                    )}
+                    {activeTab === 'database' && (
                         <div className="flex items-center gap-2">
                             <select value={dbTable} onChange={(e) => setDbTable(e.target.value)} className="bg-slate-700 text-white text-[10px] font-bold outline-none px-2 py-1.5 rounded-lg">
                                 <option value="messages">Messages</option><option value="chats">Chats</option><option value="contacts">Contacts</option><option value="instances">Instances</option><option value="settings">Settings</option>
@@ -127,7 +144,7 @@ const Debug = ({ onClose }: { onClose: () => void }) => {
                             </div>
                         ))}
                     </>
-                ) : (
+                ) : activeTab === 'database' ? (
                     <div className="overflow-x-auto">
                         <table className="w-full text-left border-collapse">
                             <thead>
@@ -149,11 +166,28 @@ const Debug = ({ onClose }: { onClose: () => void }) => {
                             <button onClick={() => { setDbOffset(dbOffset + 50); fetchDbData(); }} className="px-4 py-1 bg-slate-800 rounded text-slate-400 hover:text-white text-[10px] font-bold">NEXT 50</button>
                         </div>
                     </div>
+                ) : (
+                    <div className="space-y-2">
+                        {backups.length === 0 && <div className="p-10 text-center text-slate-600 flex flex-col items-center gap-2"><Database size={32} />No backups found</div>}
+                        {backups.map(b => (
+                            <div key={b.name} className="flex justify-between items-center bg-slate-900 p-4 rounded-xl border border-slate-800">
+                                <div>
+                                    <div className="text-teal-400 font-bold">{b.name}</div>
+                                    <div className="text-[9px] text-slate-500 font-black uppercase tracking-widest">
+                                        {(b.size / 1024 / 1024).toFixed(2)} MB &bull; {new Date(b.created).toLocaleString()}
+                                    </div>
+                                </div>
+                                <button onClick={() => downloadBackup(b.name)} className="flex items-center gap-2 bg-slate-800 px-3 py-1.5 rounded-lg text-slate-300 hover:text-white hover:bg-slate-700 transition-all text-[10px] font-bold uppercase">
+                                    <Download size={14} /> Download
+                                </button>
+                            </div>
+                        ))}
+                    </div>
                 )}
             </div>
 
             <footer className="p-2 bg-slate-800 border-t border-slate-700 text-[9px] text-slate-500 text-center font-bold uppercase tracking-widest">
-                Modular Architecture &bull; V1.8.8 &bull; Total Logs: {events.length}
+                Modular Architecture &bull; V1.9.1 &bull; Total Logs: {events.length}
             </footer>
         </div>
     );
