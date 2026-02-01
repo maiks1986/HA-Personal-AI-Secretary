@@ -1,4 +1,4 @@
 {
-  "timestamp": "2026-02-01T14:15:00Z",
-  "description": "Enabled frontend serving in index.ts by replacing the placeholder response with res.sendFile for index.html. Bumped version to 1.0.0.0004."
+  "timestamp": "2026-02-01T14:40:00Z",
+  "description": "Fixed UI asset loading in Home Assistant Ingress by setting Vite base to relative './'. Rebuilt frontend and bumped version to 1.0.0.0005."
 }
