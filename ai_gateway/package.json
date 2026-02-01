@@ -1,6 +1,6 @@
 {
   "name": "ai-gateway",
-  "version": "0.0.1.0002",
+  "version": "0.0.1.0003",
   "description": "Centralized Intelligence & Routing for Home Assistant Add-ons",
   "main": "dist/index.js",
   "scripts": {
@@ -11,6 +11,7 @@
   "dependencies": {
     "@google/generative-ai": "^0.24.1",
     "google-auth-library": "^9.11.0",
+    "jsonwebtoken": "^9.0.2",
     "axios": "^1.7.2",
     "better-sqlite3": "^11.0.0",
     "cors": "^2.8.5",
@@ -23,6 +24,7 @@
     "@types/better-sqlite3": "^7.6.10",
     "@types/cors": "^2.8.17",
     "@types/express": "^4.17.21",
+    "@types/jsonwebtoken": "^9.0.6",
     "@types/node": "^20.14.9",
     "@types/uuid": "^10.0.0",
     "ts-node": "^10.9.2",
