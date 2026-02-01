@@ -1,8 +1,8 @@
 {
-  "timestamp": "2026-02-01T09:00:00.000Z",
-  "description": "Bumped version to 1.9.1.0055. Implemented 'Zombie Session' detection. The system now monitors for 'Bad MAC' decryption errors while connected (often caused by phone battery death/desync). If 5 errors occur, it triggers an automatic 'Soft Repair' to restore sync without losing login.",
+  "timestamp": "2026-02-01T10:00:00.000Z",
+  "description": "Bumped version to 1.9.1.0056. Added Safety Backup to the Repair/Zombie protocol. Before wiping any data, the system now automatically archives the full 'whatsapp.db' to '/data/backups/', ensuring no historical data is lost even if the re-sync fails.",
   "modules_affected": [
-    "whatsapp_node/src/manager/WhatsAppInstance.ts",
+    "whatsapp_node/src/api/routes/system.ts",
     "whatsapp_node/config.yaml",
     "whatsapp_node/package.json",
     "whatsapp_node/src/last_fixes.json"

@@ -64,6 +64,31 @@ export const systemRouter = () => {
             await engineManager.stopInstance(inst.id);
         }
 
+        // 2b. SAFETY BACKUP: Archive the database before wiping
+        try {
+            const dbPath = process.env.NODE_ENV === 'development' 
+                ? path.join(__dirname, '../../../whatsapp.db') 
+                : '/data/whatsapp.db';
+            
+            const backupDir = process.env.NODE_ENV === 'development' 
+                ? path.join(__dirname, '../../../backups') 
+                : '/data/backups';
+            
+            if (!fs.existsSync(backupDir)) fs.mkdirSync(backupDir, { recursive: true });
+            
+            if (fs.existsSync(dbPath)) {
+                const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+                const backupPath = path.join(backupDir, `whatsapp_repair_${timestamp}.db`);
+                fs.copyFileSync(dbPath, backupPath);
+                console.log(`[System]: Database backed up to ${backupPath}`);
+            }
+        } catch (e) {
+            console.error("[System]: Failed to backup database during repair:", e);
+            // We continue anyway? Or abort? 
+            // Abort to be safe.
+            return res.status(500).json({ error: "Backup failed, aborting repair." });
+        }
+
         // 3. Wipe volatile DB data
         db.prepare('DELETE FROM messages').run();
         db.prepare('DELETE FROM chats').run();
