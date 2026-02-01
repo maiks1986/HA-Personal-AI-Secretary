@@ -50,203 +50,229 @@ export class WhatsAppInstance {
     public socialManager: SocialManager | null = null;
     private qrManager: QRManager;
     
-        // Health Monitor
+            // Health Monitor
     
-        private errorCount: number = 0;
+            private errorCount: number = 0;
     
-        private lastErrorTime: number = 0;
+            private lastErrorTime: number = 0;
     
-        private onlineTimeout: NodeJS.Timeout | null = null;
+            private decryptionErrorCount: number = 0;
     
+            private onlineTimeout: NodeJS.Timeout | null = null;
     
+        
     
-        constructor(id: number, name: string, io: any, debugEnabled: boolean = false, initialPresence: 'available' | 'unavailable' = 'unavailable') {
+            constructor(id: number, name: string, io: any, debugEnabled: boolean = false, initialPresence: 'available' | 'unavailable' = 'unavailable') {
     
-            this.id = id;
+                this.id = id;
     
-            this.name = name;
+                this.name = name;
     
-            this.io = io;
+                this.io = io;
     
-            this.debugEnabled = debugEnabled;
+                this.debugEnabled = debugEnabled;
     
-            this.presence = initialPresence;
+                this.presence = initialPresence;
     
-                            this.authPath = process.env.NODE_ENV === 'development'
+                this.authPath = process.env.NODE_ENV === 'development'
     
-                                ? path.join(__dirname, `../../auth_info_${id}`)
+                    ? path.join(__dirname, `../../auth_info_${id}`)
     
-                                : `/data/auth_info_${id}`;
+                    : `/data/auth_info_${id}`;
     
-                            this.logPath = process.env.NODE_ENV === 'development' ? path.join(__dirname, '../../raw_events.log') : '/data/raw_events.log';
+                this.logPath = process.env.NODE_ENV === 'development' ? path.join(__dirname, '../../raw_events.log') : '/data/logs/raw_events.log';
     
-                            this.logger = pino({ level: this.debugEnabled ? 'debug' : 'info' });
+                this.logger = pino({ level: this.debugEnabled ? 'debug' : 'info' });
     
-            this.qrManager = new QRManager();
+                this.qrManager = new QRManager();
     
-            this.msgRetryCounterCache = new NodeCache();
+                this.msgRetryCounterCache = new NodeCache();
     
-            
+                
     
-                            console.log(`[WhatsAppInstance ${this.id}]: Log Path set to: ${this.logPath}`);
+                console.log(`[WhatsAppInstance ${this.id}]: Log Path set to: ${this.logPath}`);
     
-            
+                try {
     
-                            try {
+                    fs.appendFileSync(this.logPath, `[${new Date().toISOString()}] Instance ${this.id} initialized.\n`);
     
-            
+                } catch (e) {
     
-                                fs.appendFileSync(this.logPath, `[${new Date().toISOString()}] Instance ${this.id} initialized.\n`);
+                    console.error(`[WhatsAppInstance ${this.id}]: FAILED TO WRITE TO LOG FILE!`, e);
     
-            
+                }
     
-                            } catch (e) {
+            }
     
-            
+        
     
-                                console.error(`[WhatsAppInstance ${this.id}]: FAILED TO WRITE TO LOG FILE!`, e);
+            get qr(): string | null {
     
-            
+                return this.qrManager.getQr();
     
-                            }
+            }
     
-        }
+        
     
+            async init() {
     
+                if (this.sock) return;
     
-        get qr(): string | null {
+                try {
     
-            return this.qrManager.getQr();
+                    const { state, saveCreds } = await useMultiFileAuthState(this.authPath);
     
-        }
+                    const { version } = await fetchLatestBaileysVersion();
     
+                    const dbInstance = getDb();
     
+        
     
-        async init() {
+                    this.sock = makeWASocket({
     
-            if (this.sock) return;
+                        version,
     
-            try {
+                        auth: {
     
-                const { state, saveCreds } = await useMultiFileAuthState(this.authPath);
+                            creds: state.creds,
     
-                const { version } = await fetchLatestBaileysVersion();
+                            keys: makeCacheableSignalKeyStore(state.keys, this.logger),
     
-                const dbInstance = getDb();
+                        },
     
+                        printQRInTerminal: false,
     
+                        browser: Browsers.ubuntu('Chrome'),
     
-                this.sock = makeWASocket({
+                        syncFullHistory: true,
     
-                    version,
+                        markOnlineOnConnect: this.presence === 'available',
     
-                    auth: {
+                        connectTimeoutMs: 120000, // Increased to 2m
     
-                        creds: state.creds,
+                        defaultQueryTimeoutMs: 120000,
     
-                        keys: makeCacheableSignalKeyStore(state.keys, this.logger),
+                        generateHighQualityLinkPreview: true,
     
-                    },
+                        logger: this.logger,
     
-                    printQRInTerminal: false,
-    
-                    browser: Browsers.ubuntu('Chrome'),
-    
-                    syncFullHistory: true,
-    
-                    markOnlineOnConnect: this.presence === 'available',
-    
-                    connectTimeoutMs: 120000, // Increased to 2m
-    
-                    defaultQueryTimeoutMs: 120000,
-    
-                    generateHighQualityLinkPreview: true,
-    
-                    logger: this.logger,
-    
-                    msgRetryCounterCache: this.msgRetryCounterCache
-    
-                });
-    
-    
-    
-                // 1. ATTACH ROBUST EVENT LOGGING
-    
-                const trackedEvents: any[] = [
-    
-                    'connection.update', 'creds.update', 'messaging-history.set',
-    
-                    'chats.upsert', 'chats.update', 'chats.delete',
-    
-                    'presence.update', 'contacts.upsert', 'contacts.update',
-    
-                    'messages.delete', 'messages.update', 'messages.upsert',
-    
-                    'message-receipt.update', 'groups.update', 'group-participants.update'
-    
-                ];
-    
-    
-    
-                for (const eventName of trackedEvents) {
-    
-                    this.sock.ev.on(eventName, (data) => {
-    
-                        const eventData = { 
-    
-                            timestamp: new Date().toISOString(), 
-    
-                            instanceId: this.id, 
-    
-                            type: eventName, 
-    
-                            payload: data 
-    
-                        };
-    
-                        
-    
-                        // Emit live
-    
-                        this.io.emit('raw_whatsapp_event', eventData);
-    
-                        
-    
-                        // Save to file
-    
-                        try {
-    
-                            fs.appendFileSync(this.logPath, JSON.stringify(eventData) + '\n');
-    
-                        } catch (e) {}
-    
-    
-    
-                        // Special Case: Auto-Reset on Bad MAC/Session Errors
-    
-                        if (eventName === 'connection.update' && data.lastDisconnect?.error) {
-    
-                            const errMessage = data.lastDisconnect.error.toString();
-    
-                            if (errMessage.includes('Bad MAC') || errMessage.includes('SessionError')) {
-    
-                                console.error(`[Instance ${this.id}]: CRITICAL - Detected Session Corruption. Deleting Auth.`);
-    
-                                this.deleteAuth().then(() => {
-    
-                                    this.status = 'disconnected';
-    
-                                    this.emitStatusUpdate();
-    
-                                });
-    
-                            }
-    
-                        }
+                        msgRetryCounterCache: this.msgRetryCounterCache
     
                     });
     
-                }
+        
+    
+                    // 1. ATTACH ROBUST EVENT LOGGING
+    
+                    const trackedEvents: any[] = [
+    
+                        'connection.update', 'creds.update', 'messaging-history.set',
+    
+                        'chats.upsert', 'chats.update', 'chats.delete',
+    
+                        'presence.update', 'contacts.upsert', 'contacts.update',
+    
+                        'messages.delete', 'messages.update', 'messages.upsert',
+    
+                        'message-receipt.update', 'groups.update', 'group-participants.update'
+    
+                    ];
+    
+        
+    
+                    for (const eventName of trackedEvents) {
+    
+                        this.sock.ev.on(eventName, (data) => {
+    
+                            const eventData = { 
+    
+                                timestamp: new Date().toISOString(), 
+    
+                                instanceId: this.id, 
+    
+                                type: eventName, 
+    
+                                payload: data 
+    
+                            };
+    
+                            
+    
+                            // Emit live
+    
+                            this.io.emit('raw_whatsapp_event', eventData);
+    
+                            
+    
+                            // Save to file
+    
+                            try {
+    
+                                fs.appendFileSync(this.logPath, JSON.stringify(eventData) + '\n');
+    
+                            } catch (e) {}
+    
+        
+    
+                            // ZOMBIE SESSION DETECTION (Decryption Failures)
+    
+                            // Check if logs contain Bad MAC or No Session errors even if connection is open
+    
+                            const logString = JSON.stringify(data);
+    
+                            if (logString.includes('Bad MAC') || logString.includes('No matching sessions')) {
+    
+                                this.decryptionErrorCount++;
+    
+                                console.warn(`[Instance ${this.id}]: Decryption Error Detected! Count: ${this.decryptionErrorCount}/5`);
+    
+                                
+    
+                                if (this.decryptionErrorCount >= 5) {
+    
+                                    console.error(`[Instance ${this.id}]: CRITICAL - Zombie Session Detected (5+ Bad MACs). Triggering Soft Repair.`);
+    
+                                    this.decryptionErrorCount = 0;
+    
+                                    this.softWipeSyncState().then(() => this.reconnect());
+    
+                                }
+    
+                                
+    
+                                // Auto-reset counter after 2 mins if no more errors
+    
+                                setTimeout(() => { if (this.decryptionErrorCount > 0) this.decryptionErrorCount--; }, 120000);
+    
+                            }
+    
+        
+    
+                            // Special Case: Auto-Reset on Bad MAC/Session Errors in Disconnect
+    
+                            if (eventName === 'connection.update' && data.lastDisconnect?.error) {
+    
+                                const errMessage = data.lastDisconnect.error.toString();
+    
+                                if (errMessage.includes('Bad MAC') || errMessage.includes('SessionError')) {
+    
+                                    console.error(`[Instance ${this.id}]: CRITICAL - Detected Session Corruption in Disconnect. Deleting Auth.`);
+    
+                                    this.deleteAuth().then(() => {
+    
+                                        this.status = 'disconnected';
+    
+                                        this.emitStatusUpdate();
+    
+                                    });
+    
+                                }
+    
+                            }
+    
+                        });
+    
+                    }
     
     
     
