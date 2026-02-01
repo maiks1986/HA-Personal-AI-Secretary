@@ -1,0 +1,4 @@
+{
+  "timestamp": "2026-02-01T14:15:00Z",
+  "description": "Enabled frontend serving in index.ts by replacing the placeholder response with res.sendFile for index.html. Bumped version to 1.0.0.0004."
+}
