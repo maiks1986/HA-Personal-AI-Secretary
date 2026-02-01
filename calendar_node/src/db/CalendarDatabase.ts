@@ -5,10 +5,10 @@ import pino from 'pino';
 
 const logger = pino({
   level: process.env.LOG_LEVEL || 'info',
-  transport: {
+  transport: process.env.NODE_ENV !== 'production' ? {
     target: 'pino-pretty',
     options: { colorize: true }
-  }
+  } : undefined
 });
 
 const DB_PATH = process.env.DB_PATH || '/data/calendar.db';

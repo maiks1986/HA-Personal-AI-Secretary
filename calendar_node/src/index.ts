@@ -24,10 +24,10 @@ import {
 
 const logger = pino({
   level: process.env.LOG_LEVEL || 'info',
-  transport: {
+  transport: process.env.NODE_ENV !== 'production' ? {
     target: 'pino-pretty',
     options: { colorize: true }
-  }
+  } : undefined
 });
 
 const app = express();
@@ -98,7 +98,7 @@ authManager.loadTokens().then(loaded => {
 app.get('/health', (req: Request, res: Response<HealthResponse>) => {
   res.json({ 
     status: 'ok', 
-    version: '1.0.0.0011',
+    version: '1.0.0.0012',
     authorized: authManager.isAuthorized()
   });
 });

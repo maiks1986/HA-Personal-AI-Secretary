@@ -17,10 +17,10 @@ const auth_1 = require("./middleware/auth");
 const shared_schemas_1 = require("./shared_schemas");
 const logger = (0, pino_1.default)({
     level: process.env.LOG_LEVEL || 'info',
-    transport: {
+    transport: process.env.NODE_ENV !== 'production' ? {
         target: 'pino-pretty',
         options: { colorize: true }
-    }
+    } : undefined
 });
 const app = (0, express_1.default)();
 const PORT = process.env.PORT || 5003;
@@ -81,7 +81,7 @@ authManager.loadTokens().then(loaded => {
 app.get('/health', (req, res) => {
     res.json({
         status: 'ok',
-        version: '1.0.0.0011',
+        version: '1.0.0.0012',
         authorized: authManager.isAuthorized()
     });
 });

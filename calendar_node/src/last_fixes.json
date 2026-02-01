@@ -1,10 +1,11 @@
 {
-  "timestamp": "2026-02-01T14:15:00.000Z",
-  "description": "v1.0.0.0011: Bumped version following micro-versioning workflow. Resolved port conflict with WhatsApp (moved to 5003) and added startup diagnostic logging.",
+  "timestamp": "2026-02-01T14:25:00.000Z",
+  "description": "v1.0.0.0012: Fixed crash in production by making pino-pretty transport optional (only enabled if NODE_ENV !== 'production'). Bumped version to 1.0.0.0012.",
   "modules_affected": [
-    "calendar_node/config.yaml",
-    "calendar_node/package.json",
     "calendar_node/src/index.ts",
-    "calendar_node/src/last_fixes.json"
+    "calendar_node/src/db/CalendarDatabase.ts",
+    "calendar_node/src/manager/GoogleAuthManager.ts",
+    "calendar_node/config.yaml",
+    "calendar_node/package.json"
   ]
 }

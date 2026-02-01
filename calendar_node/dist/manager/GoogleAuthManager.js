@@ -10,10 +10,10 @@ const path_1 = __importDefault(require("path"));
 const pino_1 = __importDefault(require("pino"));
 const logger = (0, pino_1.default)({
     level: process.env.LOG_LEVEL || 'info',
-    transport: {
+    transport: process.env.NODE_ENV !== 'production' ? {
         target: 'pino-pretty',
         options: { colorize: true }
-    }
+    } : undefined
 });
 const TOKEN_PATH = process.env.TOKEN_PATH || '/data/tokens.json';
 class GoogleAuthManager {
