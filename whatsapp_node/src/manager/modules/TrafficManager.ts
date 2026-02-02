@@ -18,7 +18,7 @@ export class TrafficManager {
     private queue: QueuedTask[] = [];
     private processing = false;
     private lastRequestTime = 0;
-    private minDelay = 200; // Minimum ms between ANY requests to WA
+    private minDelay = 1000; // Minimum ms between ANY requests to WA (1 req/sec)
 
     constructor(private instanceId: number) {}
 
@@ -43,6 +43,23 @@ export class TrafficManager {
 
             this.processNext();
         });
+    }
+
+    /**
+     * Clears all pending tasks in the queue.
+     * Optionally filtered by priority (clears tasks at or below the given priority).
+     */
+    public clearQueue(priorityThreshold: Priority = Priority.LOW) {
+        const removed = this.queue.filter(t => t.priority >= priorityThreshold);
+        this.queue = this.queue.filter(t => t.priority < priorityThreshold);
+        
+        for (const task of removed) {
+            task.reject(new Error("Queue cleared due to reconnection or shutdown"));
+        }
+        
+        if (removed.length > 0) {
+            console.log(`[TrafficManager ${this.instanceId}]: Cleared ${removed.length} tasks from queue.`);
+        }
     }
 
     private async processNext() {

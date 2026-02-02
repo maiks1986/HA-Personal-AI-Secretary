@@ -10,7 +10,8 @@ export class MessageManager {
         private sock: WASocket, 
         private io: any, 
         private logger: any,
-        private profilePicCallback?: (jids: string[]) => void
+        private profilePicCallback?: (jids: string[]) => void,
+        private socialCallback?: (jid: string) => void
     ) {}
 
     // --- MASS SYNC HANDLERS ---
@@ -328,6 +329,10 @@ export class MessageManager {
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT(whatsapp_id) DO UPDATE SET text = excluded.text, status = excluded.status
             `).run(this.instanceId, whatsapp_id, jid, sender_jid, senderName, text, type, media_path, latitude, longitude, vcard_data, 'sent', timestamp, is_from_me);
+
+            if (is_from_me === 1 && this.socialCallback) {
+                this.socialCallback(jid);
+            }
 
             // Save/Update Chat with Identity Name (Ensures it doesn't change to "Me" or individual sender name)
             db.prepare(`

@@ -7,6 +7,7 @@ export class WorkerManager {
     private namingWorker: NodeJS.Timeout | null = null;
     private historyWorker: NodeJS.Timeout | null = null;
     private nudgeTimer: NodeJS.Timeout | null = null;
+    private running: boolean = false;
 
     constructor(
         private instanceId: number, 
@@ -17,12 +18,14 @@ export class WorkerManager {
     ) {}
 
     startAll() {
+        this.running = true;
         this.startNamingWorker();
         this.startDeepHistoryWorker();
         this.startAutoNudgeWorker();
     }
 
     stopAll() {
+        this.running = false;
         if (this.namingWorker) clearInterval(this.namingWorker);
         if (this.historyWorker) clearTimeout(this.historyWorker);
         if (this.nudgeTimer) clearInterval(this.nudgeTimer);
@@ -34,6 +37,7 @@ export class WorkerManager {
     private startNamingWorker() {
         if (this.namingWorker) return;
         this.namingWorker = setInterval(async () => {
+            if (!this.running) return;
             const db = getDb();
             // 1. Find chats with missing or numbered names - LIMIT to 5 per cycle to avoid overloading WA
             const unnamed = db.prepare(`
@@ -119,6 +123,8 @@ export class WorkerManager {
         if (this.historyWorker) return;
         
         const runCycle = async () => {
+            if (!this.running) return;
+            
             if (this.status() !== 'connected') {
                 this.historyWorker = setTimeout(runCycle, 10000);
                 return;
@@ -140,7 +146,7 @@ export class WorkerManager {
 
             if (!chat) {
                 // Periodically check for unsynced chats in case new ones appeared
-                this.historyWorker = setTimeout(runCycle, 60000);
+                if (this.running) this.historyWorker = setTimeout(runCycle, 60000);
                 return;
             }
             
@@ -153,6 +159,8 @@ export class WorkerManager {
                 
                 const result = await this.request(async (sock) => await sock.fetchMessageHistory(100, oldestKey as any, oldestTs), Priority.LOW);
                 
+                if (!this.running) return; // Exit if stopped while waiting for request
+
                 if (!result || (Array.isArray(result) && result.length === 0) || (typeof result === 'string' && result === '')) {
                     console.log(`[Sync Worker ${this.instanceId}]: ${chat.jid} is now fully synced (Reached beginning or empty response).`);
                     db.prepare('UPDATE chats SET is_fully_synced = 1 WHERE instance_id = ? AND jid = ?').run(this.instanceId, chat.jid);
@@ -161,11 +169,11 @@ export class WorkerManager {
                     console.log(`[Sync Worker ${this.instanceId}]: Received ${result.length} historical messages for ${chat.jid}`);
                 }
             } catch (e: any) {
-                console.error(`[Sync Worker ${this.instanceId}]: Error during sync for ${chat.jid}:`, e.message);
+                if (this.running) console.error(`[Sync Worker ${this.instanceId}]: Error during sync for ${chat.jid}:`, e.message);
                 nextDelay = 30000; // 30s backoff on error
             }
 
-            this.historyWorker = setTimeout(runCycle, nextDelay);
+            if (this.running) this.historyWorker = setTimeout(runCycle, nextDelay);
         };
 
         runCycle();

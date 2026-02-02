@@ -20,27 +20,15 @@ class SocialManager {
         const tracked = db.prepare('SELECT * FROM tracked_contacts WHERE instance_id = ? AND jid = ?').get(this.instanceId, normalized);
         if (!tracked)
             return;
-        // Presence structure: { 'jid': { lastKnownPresence: 'available' } }
-        // The event usually comes as { id: '...', presences: { ... } }
-        // Here we receive the specific JID and its presence data
-        // Wait, WhatsAppInstance calls this with: 
-        // emit('presence_update', { ..., presence: update.presences })
-        // update.presences is the map.
-        // Let's assume the caller passes the specific status for this JID?
-        // No, let's parse the map.
         const participant = presence[normalized] || presence[Object.keys(presence)[0]];
         const status = participant?.lastKnownPresence;
         if (status === 'available') {
             if (!this.activeSessions.has(normalized)) {
                 this.activeSessions.set(normalized, Date.now());
-                await this.updateHASensor(normalized, 'on', { status: 'online' });
+                await this.updateHASensor(normalized, 'on', { status: 'online' }, true);
             }
         }
         else {
-            // Offline / Unavailable / Composing (ignored)
-            // Actually 'composing' means they are online.
-            // But 'available' is the main online status.
-            // If they were active and now 'unavailable' or missing
             const start = this.activeSessions.get(normalized);
             if (start && status !== 'composing' && status !== 'recording') {
                 const duration = Math.floor((Date.now() - start) / 1000); // seconds
@@ -53,9 +41,27 @@ class SocialManager {
                     last_seen: new Date().toISOString(),
                     session_duration: duration,
                     today_duration_seconds: updated.today_duration
-                });
+                }, true);
             }
         }
+    }
+    /**
+     * Records an outbound message timestamp and updates HA sensor.
+     */
+    async recordOutboundMessage(jid) {
+        const db = (0, database_1.getDb)();
+        const normalized = (0, utils_1.normalizeJid)(jid);
+        const now = new Date().toISOString();
+        // Only update if the contact is in our tracked list
+        const tracked = db.prepare('SELECT * FROM tracked_contacts WHERE instance_id = ? AND jid = ?').get(this.instanceId, normalized);
+        if (!tracked)
+            return;
+        db.prepare('UPDATE tracked_contacts SET last_outbound_timestamp = ? WHERE instance_id = ? AND jid = ?')
+            .run(now, this.instanceId, normalized);
+        await this.updateHASensor(normalized, now, {
+            jid: normalized,
+            friendly_name: `Last Messaged ${normalized.split('@')[0]}`
+        }, false);
     }
     trackContact(jid) {
         const db = (0, database_1.getDb)();
@@ -67,19 +73,20 @@ class SocialManager {
         db.prepare('DELETE FROM tracked_contacts WHERE instance_id = ? AND jid = ?').run(this.instanceId, (0, utils_1.normalizeJid)(jid));
         console.log(`[SocialManager]: Untracking ${jid}`);
     }
-    async updateHASensor(jid, state, attributes) {
+    async updateHASensor(jid, state, attributes, isBinary = true) {
         if (!process.env.SUPERVISOR_TOKEN) {
-            // console.warn('[SocialManager]: No Supervisor Token, skipping HA update');
             return;
         }
         const cleanName = jid.split('@')[0];
-        const entityId = `binary_sensor.wa_social_${cleanName}`;
+        const domain = isBinary ? 'binary_sensor' : 'sensor';
+        const suffix = isBinary ? 'social' : 'last_messaged';
+        const entityId = `${domain}.wa_${suffix}_${cleanName}`;
         try {
             await axios_1.default.post(`http://supervisor/core/api/states/${entityId}`, {
                 state: state,
                 attributes: {
-                    friendly_name: `WA ${cleanName}`,
-                    icon: 'mdi:whatsapp',
+                    friendly_name: isBinary ? `WA Online ${cleanName}` : `WA Last Messaged ${cleanName}`,
+                    icon: isBinary ? 'mdi:whatsapp' : 'mdi:history',
                     ...attributes
                 }
             }, {

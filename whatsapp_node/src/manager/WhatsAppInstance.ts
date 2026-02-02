@@ -95,19 +95,45 @@ export class WhatsAppInstance {
     
                 console.log(`[WhatsAppInstance ${this.id}]: Log Path set to: ${this.logPath}`);
     
+                const baseLogger = pino({ level: this.debugEnabled ? 'debug' : 'info' });
+                this.logger = new Proxy(baseLogger, {
+                    get: (target, prop: string) => {
+                        const val = (target as any)[prop];
+                        if (typeof val === 'function' && (prop === 'error' || prop === 'warn')) {
+                            return (...args: any[]) => {
+                                const msg = args.map(a => typeof a === 'string' ? a : JSON.stringify(a)).join(' ');
+                                if (msg.includes('Bad MAC') || msg.includes('No matching sessions') || msg.includes('SessionError')) {
+                                    this.handleDecryptionError();
+                                }
+                                return val.apply(target, args);
+                            };
+                        }
+                        return val;
+                    }
+                });
+
                 try {
-    
                     fs.appendFileSync(this.logPath, `[${new Date().toISOString()}] Instance ${this.id} initialized.\n`);
-    
                 } catch (e) {
-    
                     console.error(`[WhatsAppInstance ${this.id}]: FAILED TO WRITE TO LOG FILE!`, e);
-    
                 }
-    
             }
     
+            private handleDecryptionError() {
+                this.decryptionErrorCount++;
+                if (this.decryptionErrorCount % 5 === 1) { // Log every 5th or first
+                    console.warn(`[Instance ${this.id}]: Decryption Error Detected! Count: ${this.decryptionErrorCount}/20`);
+                }
         
+                if (this.decryptionErrorCount >= 20) { // Increased to 20 to avoid over-aggressive resets during bursts
+                    console.error(`[Instance ${this.id}]: CRITICAL - Zombie Session Detected (20+ Bad MACs). Triggering Soft Repair.`);
+                    this.decryptionErrorCount = 0;
+                    this.softWipeSyncState().then(() => this.reconnect());
+                }
+                
+                // Auto-reset counter after 2 mins if no more errors
+                setTimeout(() => { if (this.decryptionErrorCount > 0) this.decryptionErrorCount--; }, 120000);
+            }
     
             get qr(): string | null {
     
@@ -120,7 +146,13 @@ export class WhatsAppInstance {
              */
             public async request<T>(execute: (sock: WASocket) => Promise<T>, priority: Priority = Priority.LOW): Promise<T> {
                 if (!this.sock) throw new Error("Socket not initialized");
-                return this.trafficManager.enqueue(() => execute(this.sock!), priority);
+                const currentSock = this.sock;
+                return this.trafficManager.enqueue(async () => {
+                    if (!this.sock || this.sock !== currentSock) {
+                        throw new Error("Socket changed or closed during request queueing");
+                    }
+                    return execute(this.sock);
+                }, priority);
             }
     
         
@@ -215,45 +247,35 @@ export class WhatsAppInstance {
     
                             
     
-                            // Save to file
+                                                        // Save to file
     
-                            try {
+                            
     
-                                fs.appendFileSync(this.logPath, JSON.stringify(eventData) + '\n');
+                                                        try {
     
-                            } catch (e) {}
+                            
     
-        
+                                                            fs.appendFileSync(this.logPath, JSON.stringify(eventData) + '\n');
     
-                            // ZOMBIE SESSION DETECTION (Decryption Failures)
+                            
     
-                            // Check if logs contain Bad MAC or No Session errors even if connection is open
+                                                        } catch (e) {}
     
-                            const logString = JSON.stringify(data);
+                            
     
-                            if (logString.includes('Bad MAC') || logString.includes('No matching sessions')) {
+                                    
     
-                                this.decryptionErrorCount++;
+                            
     
-                                console.warn(`[Instance ${this.id}]: Decryption Error Detected! Count: ${this.decryptionErrorCount}/5`);
+                                                        // Special Case: Auto-Reset on Bad MAC/Session Errors in Disconnect
     
-                                
+                            
     
-                                if (this.decryptionErrorCount >= 5) {
+                                                        if (eventName === 'connection.update' && data.lastDisconnect?.error) {
     
-                                    console.error(`[Instance ${this.id}]: CRITICAL - Zombie Session Detected (5+ Bad MACs). Triggering Soft Repair.`);
+                            
     
-                                    this.decryptionErrorCount = 0;
-    
-                                    this.softWipeSyncState().then(() => this.reconnect());
-                                }
-                                
-                                // Auto-reset counter after 2 mins if no more errors
-                                setTimeout(() => { if (this.decryptionErrorCount > 0) this.decryptionErrorCount--; }, 120000);
-                            }
-        
-                            // Special Case: Auto-Reset on Bad MAC/Session Errors in Disconnect
-                            if (eventName === 'connection.update' && data.lastDisconnect?.error) {
+                            
                                 const errMessage = data.lastDisconnect.error.toString();
                                 if (errMessage.includes('Bad MAC') || errMessage.includes('SessionError')) {
                                     console.error(`[Instance ${this.id}]: CRITICAL - Detected Session Corruption in Disconnect. Deleting Auth.`);
@@ -275,7 +297,8 @@ export class WhatsAppInstance {
                     this.sock, 
                     this.io, 
                     this.logger, 
-                    (jids) => this.profilePictureManager?.enqueue(jids)
+                    (jids) => this.profilePictureManager?.enqueue(jids),
+                    (jid) => this.socialManager?.recordOutboundMessage(jid)
                 );
                 
                 this.workerManager = new WorkerManager(
@@ -520,6 +543,7 @@ export class WhatsAppInstance {
     async reconnect() {
         this.isReconnecting = true;
         this.workerManager?.stopAll();
+        this.trafficManager.clearQueue(Priority.MEDIUM); // Clear all Medium and Low priority tasks
         if (this.sock) { try { this.sock.end(undefined); } catch (e) {} this.sock = null; }
         await new Promise(r => setTimeout(r, 2000));
         this.isReconnecting = false;

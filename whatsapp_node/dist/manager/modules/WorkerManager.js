@@ -3,39 +3,50 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.WorkerManager = void 0;
 const database_1 = require("../../db/database");
 const utils_1 = require("../../utils");
+const TrafficManager_1 = require("./TrafficManager");
 class WorkerManager {
     instanceId;
-    sock;
+    request;
     status;
     reconnect;
+    traffic;
     namingWorker = null;
     historyWorker = null;
     nudgeTimer = null;
-    constructor(instanceId, sock, status, reconnect) {
+    running = false;
+    constructor(instanceId, request, status, reconnect, traffic) {
         this.instanceId = instanceId;
-        this.sock = sock;
+        this.request = request;
         this.status = status;
         this.reconnect = reconnect;
+        this.traffic = traffic;
     }
     startAll() {
+        this.running = true;
         this.startNamingWorker();
         this.startDeepHistoryWorker();
         this.startAutoNudgeWorker();
     }
     stopAll() {
+        this.running = false;
         if (this.namingWorker)
             clearInterval(this.namingWorker);
         if (this.historyWorker)
             clearTimeout(this.historyWorker);
         if (this.nudgeTimer)
             clearInterval(this.nudgeTimer);
+        this.namingWorker = null;
+        this.historyWorker = null;
+        this.nudgeTimer = null;
     }
     startNamingWorker() {
         if (this.namingWorker)
             return;
         this.namingWorker = setInterval(async () => {
+            if (!this.running)
+                return;
             const db = (0, database_1.getDb)();
-            // 1. Find chats with missing or numbered names
+            // 1. Find chats with missing or numbered names - LIMIT to 5 per cycle to avoid overloading WA
             const unnamed = db.prepare(`
                 SELECT jid, name FROM chats 
                 WHERE instance_id = ? 
@@ -46,18 +57,22 @@ class WorkerManager {
                     OR name LIKE '%@s.whatsapp.net' 
                     OR name GLOB '[0-9]*' -- Starts with a digit
                 )
+                LIMIT 5
             `).all(this.instanceId);
             for (const chat of unnamed) {
                 const normalized = (0, utils_1.normalizeJid)(chat.jid);
                 // --- CASE A: Groups ---
                 if (normalized.endsWith('@g.us')) {
                     try {
-                        const metadata = await this.sock.groupMetadata(normalized);
+                        console.log(`[WorkerManager ${this.instanceId}]: Fetching group metadata for unnamed group ${normalized}`);
+                        const metadata = await this.request(async (sock) => await sock.groupMetadata(normalized), TrafficManager_1.Priority.LOW);
                         if (metadata?.subject) {
                             db.prepare('UPDATE chats SET name = ? WHERE instance_id = ? AND jid = ?').run(metadata.subject, this.instanceId, normalized);
                         }
                     }
-                    catch (e) { }
+                    catch (e) {
+                        console.error(`[WorkerManager ${this.instanceId}]: Failed to fetch metadata for ${normalized}`);
+                    }
                 }
                 // --- CASE B: Individuals ---
                 else {
@@ -78,13 +93,9 @@ class WorkerManager {
                         db.prepare('UPDATE contacts SET name = ? WHERE instance_id = ? AND jid = ?').run(msg.sender_name, this.instanceId, normalized);
                         continue;
                     }
-                    // Try a business profile lookup (aggressive)
+                    // Try a business profile lookup (aggressive but rare)
                     try {
-                        const profile = await this.sock.getBusinessProfile(normalized);
-                        if (profile?.description || profile?.category) {
-                            // If it's a business, we might get a better identity later, 
-                            // but for now we've triggered a metadata update.
-                        }
+                        await this.request(async (sock) => await sock.getBusinessProfile(normalized), TrafficManager_1.Priority.LOW);
                     }
                     catch (e) { }
                 }
@@ -100,8 +111,11 @@ class WorkerManager {
                 AND c.name NOT LIKE '%@%'
                 LIMIT 100
             `).all(this.instanceId);
-            for (const row of wrongGroupSenders) {
-                db.prepare('UPDATE messages SET sender_name = ? WHERE whatsapp_id = ?').run(row.correct_name, row.whatsapp_id);
+            if (wrongGroupSenders.length > 0) {
+                console.log(`[WorkerManager ${this.instanceId}]: Fixing ${wrongGroupSenders.length} wrong sender names in groups.`);
+                for (const row of wrongGroupSenders) {
+                    db.prepare('UPDATE messages SET sender_name = ? WHERE whatsapp_id = ?').run(row.correct_name, row.whatsapp_id);
+                }
             }
         }, 60000); // Check every 60s
     }
@@ -109,13 +123,17 @@ class WorkerManager {
         if (this.historyWorker)
             return;
         const runCycle = async () => {
+            if (!this.running)
+                return;
             if (this.status() !== 'connected') {
                 this.historyWorker = setTimeout(runCycle, 10000);
                 return;
             }
             const db = (0, database_1.getDb)();
             const delaySetting = db.prepare('SELECT value FROM settings WHERE key = ?').get('sync_delay_ms');
-            let nextDelay = delaySetting?.value ? parseInt(delaySetting.value) : 2000;
+            let baseDelay = delaySetting?.value ? parseInt(delaySetting.value) : 5000;
+            // ADAPTIVE BACKOFF: Slow down if traffic queue is long
+            let nextDelay = this.traffic.getAdaptiveDelay(baseDelay);
             const chat = db.prepare(`
                 SELECT jid FROM chats 
                 WHERE instance_id = ? AND is_fully_synced = 0 
@@ -123,26 +141,35 @@ class WorkerManager {
                 LIMIT 1
             `).get(this.instanceId);
             if (!chat) {
-                console.log(`[Sync Worker ${this.instanceId}]: No more chats to sync.`);
-                this.historyWorker = null;
+                // Periodically check for unsynced chats in case new ones appeared
+                if (this.running)
+                    this.historyWorker = setTimeout(runCycle, 60000);
                 return;
             }
-            console.log(`[Sync Worker ${this.instanceId}]: Syncing history for ${chat.jid}...`);
             try {
                 const oldest = db.prepare('SELECT whatsapp_id, timestamp, is_from_me FROM messages WHERE instance_id = ? AND chat_jid = ? ORDER BY timestamp ASC LIMIT 1').get(this.instanceId, chat.jid);
                 const oldestKey = oldest ? { id: oldest.whatsapp_id, remoteJid: chat.jid, fromMe: !!oldest.is_from_me } : undefined;
                 const oldestTs = oldest ? Math.floor(new Date(oldest.timestamp).getTime() / 1000) : 0;
-                const result = await this.sock.fetchMessageHistory(100, oldestKey, oldestTs);
-                if (!result || (typeof result === 'string' && result === '')) {
+                console.log(`[Sync Worker ${this.instanceId}]: Fetching 100 messages for ${chat.jid} (Queue: ${this.traffic.getQueueSize()})`);
+                const result = await this.request(async (sock) => await sock.fetchMessageHistory(100, oldestKey, oldestTs), TrafficManager_1.Priority.LOW);
+                if (!this.running)
+                    return; // Exit if stopped while waiting for request
+                if (!result || (Array.isArray(result) && result.length === 0) || (typeof result === 'string' && result === '')) {
+                    console.log(`[Sync Worker ${this.instanceId}]: ${chat.jid} is now fully synced (Reached beginning or empty response).`);
                     db.prepare('UPDATE chats SET is_fully_synced = 1 WHERE instance_id = ? AND jid = ?').run(this.instanceId, chat.jid);
-                    nextDelay = 500;
+                    nextDelay = 1000; // Faster transition to next chat
+                }
+                else if (Array.isArray(result)) {
+                    console.log(`[Sync Worker ${this.instanceId}]: Received ${result.length} historical messages for ${chat.jid}`);
                 }
             }
             catch (e) {
-                console.error(`[Sync Worker ${this.instanceId}]: Timeout or Error, backing off...`, e);
+                if (this.running)
+                    console.error(`[Sync Worker ${this.instanceId}]: Error during sync for ${chat.jid}:`, e.message);
                 nextDelay = 30000; // 30s backoff on error
             }
-            this.historyWorker = setTimeout(runCycle, nextDelay);
+            if (this.running)
+                this.historyWorker = setTimeout(runCycle, nextDelay);
         };
         runCycle();
     }

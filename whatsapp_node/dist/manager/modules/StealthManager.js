@@ -2,14 +2,15 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.StealthManager = void 0;
 const database_1 = require("../../db/database");
+const TrafficManager_1 = require("./TrafficManager");
 class StealthManager {
     instanceId;
-    sock;
+    request;
     interval = null;
     lastAppliedMode = null;
-    constructor(instanceId, sock) {
+    constructor(instanceId, request) {
         this.instanceId = instanceId;
-        this.sock = sock;
+        this.request = request;
     }
     start() {
         if (this.interval)
@@ -60,32 +61,24 @@ class StealthManager {
     }
     async applyStealthMode(mode, schedule) {
         try {
-            const sock = this.sock;
             if (!mode) {
                 console.log(`[StealthManager ${this.instanceId}]: Reverting to default privacy (Everyone).`);
-                await sock.updatePrivacySetting('lastSeen', 'all');
-                await sock.updatePrivacySetting('online', 'all');
+                await this.request(async (sock) => await sock.updatePrivacySetting('lastSeen', 'all'), TrafficManager_1.Priority.MEDIUM);
+                await this.request(async (sock) => await sock.updatePrivacySetting('online', 'all'), TrafficManager_1.Priority.MEDIUM);
                 return;
             }
             if (mode === 'GLOBAL_NOBODY') {
                 console.log(`[StealthManager ${this.instanceId}]: Applying Global Stealth Mode (Nobody).`);
-                await sock.updatePrivacySetting('lastSeen', 'none');
-                await sock.updatePrivacySetting('online', 'match_last_seen');
+                await this.request(async (sock) => await sock.updatePrivacySetting('lastSeen', 'none'), TrafficManager_1.Priority.MEDIUM);
+                await this.request(async (sock) => await sock.updatePrivacySetting('online', 'match_last_seen'), TrafficManager_1.Priority.MEDIUM);
             }
             if (mode === 'SPECIFIC_CONTACTS') {
                 console.log(`[StealthManager ${this.instanceId}]: Applying Specific Stealth Mode for ${schedule.name}.`);
                 const db = (0, database_1.getDb)();
                 const targets = db.prepare('SELECT contact_jid FROM stealth_targets WHERE schedule_id = ?').all(schedule.id);
                 const jids = targets.map(t => t.contact_jid);
-                // Option A: Specific Contacts
-                // Attempting to use Baileys 'contact_blacklist' if supported for privacy
-                // Note: This relies on the 'contact_blacklist' value being correctly interpreted as the 'My Contacts Except' list.
-                await sock.updatePrivacySetting('lastSeen', 'contact_blacklist');
-                await sock.updatePrivacySetting('online', 'match_last_seen');
-                // CRITICAL: We need to push the JIDs to the exclusion list. 
-                // Baileys doesn't have a direct helper for this specific list yet in standard docs, 
-                // but some versions support passing the list in updatePrivacySetting or a separate call.
-                // For now, we log the intent. 
+                await this.request(async (sock) => await sock.updatePrivacySetting('lastSeen', 'contact_blacklist'), TrafficManager_1.Priority.MEDIUM);
+                await this.request(async (sock) => await sock.updatePrivacySetting('online', 'match_last_seen'), TrafficManager_1.Priority.MEDIUM);
                 console.log(`[StealthManager]: Targets for exclusion: ${jids.join(', ')}`);
             }
         }

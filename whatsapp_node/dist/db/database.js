@@ -155,6 +155,7 @@ function initDatabase() {
             instance_id INTEGER,
             jid TEXT,
             last_online DATETIME,
+            last_outbound_timestamp DATETIME,
             today_duration INTEGER DEFAULT 0,
             PRIMARY KEY (instance_id, jid)
         )
@@ -186,6 +187,8 @@ function initDatabase() {
     // Contact Migrations
     ensureColumn('contacts', 'lid', 'TEXT');
     ensureColumn('contacts', 'profile_picture', 'TEXT');
+    // Social Tracking Migrations
+    ensureColumn('tracked_contacts', 'last_outbound_timestamp', 'DATETIME');
     // Ephemeral Message Migrations
     ensureColumn('chats', 'ephemeral_mode', 'INTEGER DEFAULT 0');
     ensureColumn('chats', 'ephemeral_timer', 'INTEGER DEFAULT 60'); // Minutes

@@ -15,12 +15,14 @@ class MessageManager {
     io;
     logger;
     profilePicCallback;
-    constructor(instanceId, sock, io, logger, profilePicCallback) {
+    socialCallback;
+    constructor(instanceId, sock, io, logger, profilePicCallback, socialCallback) {
         this.instanceId = instanceId;
         this.sock = sock;
         this.io = io;
         this.logger = logger;
         this.profilePicCallback = profilePicCallback;
+        this.socialCallback = socialCallback;
     }
     // --- MASS SYNC HANDLERS ---
     async handleHistorySet(payload) {
@@ -313,6 +315,9 @@ class MessageManager {
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT(whatsapp_id) DO UPDATE SET text = excluded.text, status = excluded.status
             `).run(this.instanceId, whatsapp_id, jid, sender_jid, senderName, text, type, media_path, latitude, longitude, vcard_data, 'sent', timestamp, is_from_me);
+            if (is_from_me === 1 && this.socialCallback) {
+                this.socialCallback(jid);
+            }
             // Save/Update Chat with Identity Name (Ensures it doesn't change to "Me" or individual sender name)
             db.prepare(`
                 INSERT INTO chats (instance_id, jid, name, unread_count, last_message_timestamp) 

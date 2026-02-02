@@ -19,10 +19,18 @@ const instancesRouter = () => {
         }
         const instancesWithQr = instances.map((inst) => {
             const activeInstance = EngineManager_1.engineManager.getInstance(inst.id);
+            // Fetch tracked contacts for this instance
+            const tracked = db.prepare(`
+                SELECT tc.*, c.name 
+                FROM tracked_contacts tc
+                LEFT JOIN contacts c ON tc.jid = c.jid AND tc.instance_id = c.instance_id
+                WHERE tc.instance_id = ?
+            `).all(inst.id);
             return {
                 ...inst,
                 qr: activeInstance ? activeInstance.qr : null,
-                status: activeInstance ? activeInstance.status : inst.status
+                status: activeInstance ? activeInstance.status : inst.status,
+                tracked: tracked
             };
         });
         console.log('[API] GET /instances response:', JSON.stringify(instancesWithQr.map(i => ({ id: i.id, status: i.status, hasQr: !!i.qr }))));

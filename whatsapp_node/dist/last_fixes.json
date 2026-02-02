@@ -1,10 +1,4 @@
 {
-  "timestamp": "2026-02-01T15:00:00.000Z",
-  "description": "Bumped version to 1.9.1.0059. Fixed Sidebar last message preview logic by ensuring 'last_message_text' and 'last_message_timestamp' are only updated when a truly newer message is received, preventing historical syncs from overwriting the latest message. Also optimized the API query to use these fields directly instead of unreliable 'MAX' aggregators on text fields.",
-  "modules_affected": [
-    "whatsapp_node/src/manager/modules/MessageManager.ts",
-    "whatsapp_node/src/api/routes/messaging.ts",
-    "whatsapp_node/package.json",
-    "whatsapp_node/src/last_fixes.json"
-  ]
+  "timestamp": "2026-02-02T09:05:00Z",
+  "description": "Throttled global request queue to 1 req/sec (1000ms delay) to prevent session corruption and rate-limiting. Previous fixes included WorkerManager stop flag and Proxy Logger."
 }

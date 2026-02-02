@@ -9,16 +9,19 @@ const utils_1 = require("../../utils");
 const fs_1 = __importDefault(require("fs"));
 const path_1 = __importDefault(require("path"));
 const axios_1 = __importDefault(require("axios"));
+const TrafficManager_1 = require("./TrafficManager");
 class ProfilePictureManager {
     instanceId;
-    sock;
+    request;
+    traffic;
     queue = new Set();
     interval = null;
     processing = false;
     avatarDir;
-    constructor(instanceId, sock) {
+    constructor(instanceId, request, traffic) {
         this.instanceId = instanceId;
-        this.sock = sock;
+        this.request = request;
+        this.traffic = traffic;
         this.avatarDir = process.env.NODE_ENV === 'development'
             ? path_1.default.join(__dirname, '../../../../media/avatars')
             : '/data/media/avatars';
@@ -32,13 +35,18 @@ class ProfilePictureManager {
     start() {
         if (this.interval)
             return;
-        // Process 1 item every 2 seconds
-        this.interval = setInterval(() => this.processNext(), 2000);
+        const runNext = async () => {
+            await this.processNext();
+            const baseDelay = 5000;
+            const nextDelay = this.traffic.getAdaptiveDelay(baseDelay);
+            this.interval = setTimeout(runNext, nextDelay);
+        };
+        runNext();
         console.log(`[ProfilePictureManager ${this.instanceId}]: Started worker.`);
     }
     stop() {
         if (this.interval)
-            clearInterval(this.interval);
+            clearTimeout(this.interval);
         this.interval = null;
     }
     enqueue(jids) {
@@ -80,12 +88,12 @@ class ProfilePictureManager {
             // TRY PREVIEW FIRST (Much more likely to succeed for individuals)
             let url = null;
             try {
-                url = await this.sock.profilePictureUrl(jid, 'preview');
+                url = await this.request(async (sock) => await sock.profilePictureUrl(jid, 'preview'), TrafficManager_1.Priority.LOW);
             }
             catch (e) {
                 // If preview fails, try high-res just in case
                 try {
-                    url = await this.sock.profilePictureUrl(jid, 'image');
+                    url = await this.request(async (sock) => await sock.profilePictureUrl(jid, 'image'), TrafficManager_1.Priority.LOW);
                 }
                 catch (e2) { }
             }
