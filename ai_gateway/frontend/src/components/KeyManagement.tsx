@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Key, Trash2, Plus, AlertTriangle, Settings, ShieldCheck, Link2 } from 'lucide-react';
+import { Key, Trash2, Plus, AlertTriangle, Link2 } from 'lucide-react';
 import { api } from '../api';
 import axios from 'axios';
 
@@ -9,7 +9,6 @@ export function KeyManagement() {
     const [label, setLabel] = useState('');
     const [provider, setProvider] = useState('gemini');
     const [loading, setLoading] = useState(false);
-    const [showSettings, setShowSettings] = useState(false);
     
     // Auth Node Providers
     const [oauthProviders, setOauthProviders] = useState<any[]>([]);
