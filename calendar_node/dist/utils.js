@@ -19,6 +19,7 @@ function loadConfig() {
     return {
         google_client_id: process.env.GOOGLE_CLIENT_ID || '',
         google_client_secret: process.env.GOOGLE_CLIENT_SECRET || '',
+        internal_token: process.env.INTERNAL_TOKEN || 'change-me-for-security',
         debug_logging: process.env.DEBUG_LOGGING === 'true'
     };
 }

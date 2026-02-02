@@ -1,11 +1,12 @@
 {
-  "timestamp": "2026-02-02T11:45:00.000Z",
-  "description": "v1.0.0.0013: Migrated to Unified Login and OAuth Bridge. Calendar Master now fetches Google tokens from auth_node. Updated UI to support JWT-based provider syncing.",
+  "timestamp": "2026-02-02T12:05:00.000Z",
+  "description": "v1.0.0.0014: Implemented Service-to-Service Authentication (Background Tasks). Added support for X-Internal-Token header to fetch Google tokens for background sync without an active user session. Improved token authorization checks.",
   "modules_affected": [
     "calendar_node/src/index.ts",
     "calendar_node/src/services/GlobalAuthService.ts",
+    "calendar_node/src/manager/CalendarManager.ts",
     "calendar_node/src/manager/GoogleAuthManager.ts",
-    "calendar_node/frontend/src/App.tsx",
+    "calendar_node/src/utils.ts",
     "calendar_node/config.yaml",
     "calendar_node/package.json"
   ]

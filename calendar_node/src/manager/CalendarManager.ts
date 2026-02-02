@@ -2,6 +2,8 @@ import { google } from 'googleapis';
 import { GoogleAuthManager } from './GoogleAuthManager';
 import { CalendarDatabase } from '../db/CalendarDatabase';
 import { CalendarEvent } from '../shared_schemas';
+import { GlobalAuthService } from '../services/GlobalAuthService';
+import { AppConfig } from '../utils';
 import pino from 'pino';
 
 const logger = pino({
@@ -15,9 +17,11 @@ const logger = pino({
 export class CalendarManager {
   private authManagers: Map<string, GoogleAuthManager> = new Map();
   private db: CalendarDatabase;
+  private config: AppConfig;
 
-  constructor(db: CalendarDatabase) {
+  constructor(db: CalendarDatabase, config: AppConfig) {
     this.db = db;
+    this.config = config;
   }
 
   public registerGoogleInstance(instanceId: string, auth: GoogleAuthManager) {
@@ -28,9 +32,32 @@ export class CalendarManager {
     const instances = this.db.getInstances() as any[];
     for (const inst of instances) {
       if (inst.type === 'google') {
+        // Attempt to re-authorize if needed before sync
+        await this.ensureAuthorized(inst);
         await this.syncGoogleInstance(inst.id);
       } else if (inst.type === 'ics') {
         // TODO: Implement ICS Sync
+      }
+    }
+  }
+
+  private async ensureAuthorized(inst: any) {
+    const auth = this.authManagers.get(inst.id);
+    if (!auth) return;
+
+    if (!auth.isAuthorized()) {
+      logger.info(`Instance ${inst.id} not authorized. Attempting background refresh...`);
+      try {
+        const instConfig = JSON.parse(inst.config);
+        if (instConfig.owner_id && this.config.internal_token) {
+          const googleTokens = await GlobalAuthService.getInternalOAuthToken('google', instConfig.owner_id, this.config.internal_token);
+          if (googleTokens) {
+            auth.setExternalTokens(googleTokens);
+            logger.info(`Successfully refreshed background tokens for instance ${inst.id}`);
+          }
+        }
+      } catch (err) {
+        logger.error(err, `Failed to refresh background tokens for ${inst.id}`);
       }
     }
   }

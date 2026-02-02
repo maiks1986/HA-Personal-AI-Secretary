@@ -1,5 +1,5 @@
 name: "Calendar Master"
-version: "1.0.0.0013"
+version: "1.0.0.0014"
 slug: "calendar_master"
 description: "Google Calendar Manager for Personal AI Secretary"
 arch:
@@ -13,10 +13,12 @@ map:
 options:
   google_client_id: ""
   google_client_secret: ""
+  internal_token: "change-me-for-security"
   debug_logging: false
 schema:
   google_client_id: str?
   google_client_secret: str?
+  internal_token: str?
   debug_logging: bool?
 ingress: true
 ingress_port: 5003

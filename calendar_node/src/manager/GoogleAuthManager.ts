@@ -91,6 +91,14 @@ export class GoogleAuthManager {
   }
 
   public isAuthorized() {
-    return !!this.oauth2Client.credentials.access_token;
+    const creds = this.oauth2Client.credentials;
+    if (!creds.access_token) return false;
+    
+    // If we have an expiry date, check if it's already passed
+    if (creds.expiry_date && creds.expiry_date <= Date.now()) {
+      return false;
+    }
+    
+    return true;
   }
 }

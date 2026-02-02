@@ -39,6 +39,18 @@ export class GlobalAuthService {
         }
     }
 
+    static async getInternalOAuthToken(provider: string, userId: string, internalToken: string): Promise<any> {
+        try {
+            const res = await axios.get(`${AUTH_URL}/api/oauth/token/${provider}?user_id=${userId}`, {
+                headers: { 'X-Internal-Token': internalToken }
+            });
+            return res.data;
+        } catch (e) {
+            console.error(`[GlobalAuth] Internal fetch failed for ${provider} (User: ${userId}):`, (e as any).message);
+            return null;
+        }
+    }
+
     static verifyToken(token: string): AuthUser | null {
         if (!this.publicKey) return null;
 

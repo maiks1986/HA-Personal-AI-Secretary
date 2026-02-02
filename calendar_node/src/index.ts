@@ -36,7 +36,7 @@ const config = loadConfig();
 
 // Initialize Managers
 const db = new CalendarDatabase();
-const calendarManager = new CalendarManager(db);
+const calendarManager = new CalendarManager(db, config);
 
 // Main Google Instance Initialization
 const MAIN_INSTANCE_ID = 'main_google';
@@ -70,9 +70,9 @@ app.use(express.json());
 app.use(authMiddleware);
 
 // Initialize Auth
-authManager.loadTokens().then(loaded => {
+authManager.loadTokens().then(async (loaded) => {
   if (loaded) {
-    logger.info('Google Calendar tokens loaded');
+    logger.info('Google Calendar tokens loaded from local storage');
     // Ensure instance is in DB
     try {
       db.saveInstance({
@@ -88,7 +88,27 @@ authManager.loadTokens().then(loaded => {
       logger.error(dbErr, 'Failed to save initial instance to DB');
     }
   } else {
-    logger.warn('No Google Calendar tokens found. Authentication required.');
+    logger.warn('No Google Calendar tokens found locally. Attempting background sync via Auth Node...');
+    
+    // Check if we have a saved instance with an owner_id to try internal sync
+    const instances = db.getInstances() as any[];
+    const mainInst = instances.find(i => i.id === MAIN_INSTANCE_ID);
+    
+    if (mainInst && mainInst.config) {
+      try {
+        const instConfig = JSON.parse(mainInst.config);
+        if (instConfig.owner_id && config.internal_token) {
+           const googleTokens = await GlobalAuthService.getInternalOAuthToken('google', instConfig.owner_id, config.internal_token);
+           if (googleTokens) {
+             logger.info(`Successfully retrieved background tokens for user ${instConfig.owner_id}`);
+             authManager.setExternalTokens(googleTokens);
+             calendarManager.syncAll().catch((err: any) => logger.error(err, 'Background initial sync failed'));
+           }
+        }
+      } catch (err) {
+        logger.error('Failed to process saved instance config for background sync');
+      }
+    }
   }
 }).catch(err => {
   logger.error(err, 'Failed to load tokens');
@@ -117,6 +137,7 @@ app.post('/api/auth/sync-provider', async (req: Request, res: Response) => {
 
   const token = authHeader.split(' ')[1];
   try {
+    const user = GlobalAuthService.verifyToken(token);
     const googleTokens = await GlobalAuthService.getOAuthToken('google', token);
     if (!googleTokens) {
       return res.status(400).json({ error: 'Failed to retrieve Google tokens from Auth Node. Ensure account is linked.' });
@@ -129,7 +150,10 @@ app.post('/api/auth/sync-provider', async (req: Request, res: Response) => {
       id: MAIN_INSTANCE_ID,
       name: 'Main Google Account (Sync)',
       type: 'google',
-      config: { synced_from: 'auth_node' },
+      config: { 
+        synced_from: 'auth_node',
+        owner_id: user?.id 
+      },
       is_active: true
     });
 

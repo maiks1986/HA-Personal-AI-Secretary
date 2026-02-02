@@ -5,6 +5,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.CalendarManager = void 0;
 const googleapis_1 = require("googleapis");
+const GlobalAuthService_1 = require("../services/GlobalAuthService");
 const pino_1 = __importDefault(require("pino"));
 const logger = (0, pino_1.default)({
     level: process.env.LOG_LEVEL || 'info',
@@ -16,8 +17,10 @@ const logger = (0, pino_1.default)({
 class CalendarManager {
     authManagers = new Map();
     db;
-    constructor(db) {
+    config;
+    constructor(db, config) {
         this.db = db;
+        this.config = config;
     }
     registerGoogleInstance(instanceId, auth) {
         this.authManagers.set(instanceId, auth);
@@ -26,10 +29,33 @@ class CalendarManager {
         const instances = this.db.getInstances();
         for (const inst of instances) {
             if (inst.type === 'google') {
+                // Attempt to re-authorize if needed before sync
+                await this.ensureAuthorized(inst);
                 await this.syncGoogleInstance(inst.id);
             }
             else if (inst.type === 'ics') {
                 // TODO: Implement ICS Sync
+            }
+        }
+    }
+    async ensureAuthorized(inst) {
+        const auth = this.authManagers.get(inst.id);
+        if (!auth)
+            return;
+        if (!auth.isAuthorized()) {
+            logger.info(`Instance ${inst.id} not authorized. Attempting background refresh...`);
+            try {
+                const instConfig = JSON.parse(inst.config);
+                if (instConfig.owner_id && this.config.internal_token) {
+                    const googleTokens = await GlobalAuthService_1.GlobalAuthService.getInternalOAuthToken('google', instConfig.owner_id, this.config.internal_token);
+                    if (googleTokens) {
+                        auth.setExternalTokens(googleTokens);
+                        logger.info(`Successfully refreshed background tokens for instance ${inst.id}`);
+                    }
+                }
+            }
+            catch (err) {
+                logger.error(err, `Failed to refresh background tokens for ${inst.id}`);
             }
         }
     }
