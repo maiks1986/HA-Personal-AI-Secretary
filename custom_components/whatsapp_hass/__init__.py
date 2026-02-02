@@ -5,6 +5,7 @@ from datetime import timedelta
 from homeassistant.core import HomeAssistant, ServiceCall
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.components.http import HomeAssistantView
+from homeassistant.components import frontend
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 from homeassistant.helpers import config_validation as cv, device_registry as dr
 from .const import DOMAIN
@@ -54,23 +55,13 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry):
     }
 
     # Register Panel
-    # Note: We need to serve the frontend assets. 
-    # For now, we point to the Ingress URL or a View.
-    # Ideally, we serve static files from 'www'.
-    
-    # Path to the build output (we will need to copy frontend/dist to custom_components/whatsapp_hass/www)
-    # hass.http.register_static_path("/whatsapp_hass_static", hass.config.path("custom_components/whatsapp_hass/www"), cache_headers=False)
-
-    hass.components.frontend.async_register_panel(
+    frontend.async_register_panel(
+        hass,
         "whatsapp",
         "WhatsApp",
         "mdi:whatsapp",
         frontend_url_path="whatsapp",
-        module_url=None, # We will use an iframe or custom element later
-        # For simple iframe to the engine (if exposed):
-        # url=engine_url 
-        # But we want internal proxy.
-        # So we register a View that serves the HTML.
+        module_url=None,
     )
 
     # Register Proxy View
@@ -150,7 +141,7 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry):
     data = hass.data[DOMAIN].pop(entry.entry_id)
     await data["session"].close()
     
-    hass.components.frontend.async_remove_panel("whatsapp")
+    frontend.async_remove_panel(hass, "whatsapp")
     
     return await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
 

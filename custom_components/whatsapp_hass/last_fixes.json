@@ -1,7 +1,8 @@
 {
-  "last_update": "2026-02-01T21:55:00Z",
-  "version": "1.9.2",
+  "last_update": "2026-02-01T22:15:00Z",
+  "version": "1.9.3",
   "changes": [
+    "Fixed AttributeError in __init__.py by importing and using frontend component directly for panel registration",
     "Implemented dynamic sensor discovery for tracked contacts as per hass_component.md contract",
     "Added track_contact and untrack_contact services",
     "Updated binary_sensor.py with connectivity class and last_seen attributes",
