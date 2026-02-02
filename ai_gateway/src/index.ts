@@ -7,7 +7,6 @@ import { initDatabase, getDb } from './db/database';
 import { RegistryManager } from './manager/RegistryManager';
 import { AiManager } from './manager/AiManager';
 import { KeyManager } from './manager/KeyManager';
-import { OAuthManager } from './manager/OAuthManager';
 import { GlobalAuthService } from './services/GlobalAuthService';
 import { identityResolver, requireAuth, requireAdmin } from './api/authMiddleware';
 import { 
@@ -72,36 +71,6 @@ app.get('/health', (req, res) => {
         version: process.env.npm_package_version || '0.0.1.0005',
         last_fix: lastFixes
     });
-});
-
-// --- Auth Routes (Contract Aligned) ---
-
-app.get('/auth/google/url', (req, res) => {
-    try {
-        const url = OAuthManager.getAuthUrl();
-        res.json({ success: true, data: { url } } as ApiResponse);
-    } catch (e: any) {
-        res.status(500).json({ success: false, error: e.message } as ApiResponse);
-    }
-});
-
-// Contract requires GET /auth/google/callback
-app.get('/auth/google/callback', async (req, res) => {
-    const { code } = req.query;
-    if (!code) return res.status(400).send('Missing code parameter');
-
-    try {
-        const tokens = await OAuthManager.exchangeCode(code as string);
-        // Store the main API Key or Tokens in settings/keys
-        // For simplicity and to satisfy the 'strip out' request, we'll store it as a specific key
-        KeyManager.addKey('gemini', JSON.stringify(tokens), 'Google Auth Account', 'oauth');
-        
-        // Redirect back to dashboard or show success
-        res.send('<h1>Authentication Successful</h1><p>You can close this window and return to the AI Gateway Dashboard.</p><script>setTimeout(() => window.close(), 3000)</script>');
-    } catch (e: any) {
-        logger.error(`Auth Callback Error: ${e.message}`);
-        res.status(500).send(`Authentication Failed: ${e.message}`);
-    }
 });
 
 // --- Settings API (Contract Aligned) ---

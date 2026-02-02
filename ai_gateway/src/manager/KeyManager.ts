@@ -1,5 +1,4 @@
 import { getDb } from '../db/database';
-import { OAuthManager } from './OAuthManager';
 import pino from 'pino';
 
 const logger = pino();

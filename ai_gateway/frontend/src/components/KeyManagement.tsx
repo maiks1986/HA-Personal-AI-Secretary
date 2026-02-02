@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
-import { Key, Trash2, Plus, AlertTriangle, Settings, ShieldCheck } from 'lucide-react';
+import { Key, Trash2, Plus, AlertTriangle, Settings, ShieldCheck, Link2 } from 'lucide-react';
 import { api } from '../api';
+import axios from 'axios';
 
 export function KeyManagement() {
     const [keys, setKeys] = useState<any[]>([]);
@@ -10,9 +11,8 @@ export function KeyManagement() {
     const [loading, setLoading] = useState(false);
     const [showSettings, setShowSettings] = useState(false);
     
-    // Settings State
-    const [clientId, setClientId] = useState('');
-    const [redirectUri, setRedirectUri] = useState('');
+    // Auth Node Providers
+    const [oauthProviders, setOauthProviders] = useState<any[]>([]);
 
     const fetchKeys = async () => {
         const res = await api.getKeys();
@@ -21,24 +21,30 @@ export function KeyManagement() {
         }
     };
 
-    const fetchSettings = async () => {
-        const res = await api.getSettings();
-        if (res.success && res.data) {
-            setClientId(res.data.google_client_id || '');
-            setRedirectUri(res.data.google_redirect_uri || '');
+    const fetchOauthProviders = async () => {
+        try {
+            // Note: We need a public endpoint on Auth Node to list providers
+            // for the button display, OR we assume the user is logged in.
+            const authBase = window.location.origin + window.location.pathname.replace(/ai_gateway\/?$/, 'auth_node');
+            const res = await axios.get(`${authBase}/api/oauth/providers`);
+            if (res.data.success) {
+                setOauthProviders(res.data.providers);
+            }
+        } catch (e) {
+            console.warn('Could not fetch OAuth providers from Auth Node');
         }
     };
 
     useEffect(() => {
         fetchKeys();
-        fetchSettings();
+        fetchOauthProviders();
     }, []);
 
     const handleAdd = async (e: React.FormEvent) => {
         e.preventDefault();
         setLoading(true);
         try {
-            await api.addKey(provider, newKey, label, 'static'); // Default static
+            await api.addKey(provider, newKey, label, 'static'); 
             setNewKey('');
             setLabel('');
             await fetchKeys();
@@ -59,39 +65,28 @@ export function KeyManagement() {
         }
     };
 
-    const startOAuth = async () => {
-        try {
-            const res = await api.getAuthUrl();
-            if (res.success && res.data?.url) {
-                // Open in a popup
-                const width = 600;
-                const height = 700;
-                const left = window.screen.width / 2 - width / 2;
-                const top = window.screen.height / 2 - height / 2;
-                
-                const win = window.open(
-                    res.data.url, 
-                    'google-oauth', 
-                    `width=${width},height=${height},left=${left},top=${top}`
-                );
+    const startOAuth = async (providerId: string) => {
+        const res = await api.getAuthUrl(providerId);
+        if (res.success && res.data?.url) {
+            const width = 600;
+            const height = 700;
+            const left = window.screen.width / 2 - width / 2;
+            const top = window.screen.height / 2 - height / 2;
+            
+            const win = window.open(
+                res.data.url, 
+                'oauth-bridge', 
+                `width=${width},height=${height},left=${left},top=${top}`
+            );
 
-                // Simple polling to refresh keys once popup is closed
-                const timer = setInterval(() => {
-                    if (win?.closed) {
-                        clearInterval(timer);
-                        fetchKeys();
-                    }
-                }, 1000);
-
-            } else {
-                alert('Could not generate Auth URL. Ensure Client ID/Secret are configured in Add-on Settings.');
-            }
-        } catch (e) {
-            alert('Failed to start OAuth. Configure Client ID/Secret in Add-on Settings first.');
+            const timer = setInterval(() => {
+                if (win?.closed) {
+                    clearInterval(timer);
+                    fetchKeys();
+                }
+            }, 1000);
         }
     };
-
-    const isConfigured = clientId && clientId.trim() !== '';
 
     return (
         <div className="bg-gray-800 p-6 rounded-2xl border border-gray-700 md:col-span-2 relative">
@@ -100,68 +95,36 @@ export function KeyManagement() {
                     <Key size={20} className="text-yellow-400" />
                     API Key Management
                 </h2>
-                <div className="flex items-center gap-2">
-                    {!isConfigured && (
-                        <span className="text-[10px] bg-red-900/40 text-red-400 px-2 py-1 rounded border border-red-900/50 flex items-center gap-1">
-                            <AlertTriangle size={10} /> OAuth Setup Required
-                        </span>
-                    )}
-                    <button onClick={() => { setShowSettings(true); fetchSettings(); }} className="p-2 hover:bg-gray-700 rounded-full text-gray-400 hover:text-white transition-colors">
-                        <Settings size={20} />
-                    </button>
-                </div>
             </div>
 
-            {/* OAuth Config View (Read Only) */}
-            {showSettings && (
-                <div className="absolute inset-0 bg-gray-900/95 z-10 p-6 rounded-2xl flex flex-col justify-center">
-                    <h3 className="text-lg font-bold mb-4 text-white">Google OAuth Configuration</h3>
-                    <p className="text-xs text-gray-400 mb-4">These settings are managed in the Home Assistant Add-on Configuration tab.</p>
-                    <div className="space-y-4">
-                        <div>
-                            <label className="block text-xs text-gray-500 mb-1">Client ID</label>
-                            <input type="text" value={clientId} readOnly className="w-full bg-gray-800 border border-gray-700 rounded p-2 text-gray-400 cursor-not-allowed" />
-                        </div>
-                        <div>
-                            <label className="block text-xs text-gray-500 mb-1">Client Secret</label>
-                            <input type="text" value="********" readOnly className="w-full bg-gray-800 border border-gray-700 rounded p-2 text-gray-400 cursor-not-allowed" />
-                        </div>
-                        <div>
-                            <label className="block text-xs text-gray-500 mb-1">Redirect URI</label>
-                            <input type="text" value={redirectUri} readOnly className="w-full bg-gray-800 border border-gray-700 rounded p-2 text-gray-400 cursor-not-allowed" />
-                        </div>
-                        <div className="flex justify-end mt-4">
-                            <button onClick={() => setShowSettings(false)} className="px-6 py-2 bg-gray-700 text-white rounded hover:bg-gray-600">Close</button>
-                        </div>
+            {/* Actions: OAuth Bridge */}
+            <div className="space-y-4 mb-6">
+                <div className="bg-blue-900/10 border border-blue-800/30 p-4 rounded-xl">
+                    <h4 className="text-sm font-bold text-blue-400 mb-2 flex items-center gap-2">
+                        <Link2 size={16} /> OAuth Bridges (Auth Node)
+                    </h4>
+                    <p className="text-xs text-slate-400 mb-4">
+                        Connect your cloud accounts via the central Identity Gate.
+                    </p>
+                    
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        {oauthProviders.map(p => (
+                            <button 
+                                key={p.id}
+                                onClick={() => startOAuth(p.id)}
+                                className="bg-slate-700 hover:bg-slate-600 text-white px-4 py-3 rounded-lg border border-slate-600 transition-all flex items-center justify-center gap-2 text-sm font-medium"
+                            >
+                                {p.type === 'google' && <img src="https://upload.wikimedia.org/wikipedia/commons/c/c1/Google_%22G%22_logo.svg" className="w-4 h-4" alt="" />}
+                                Connect {p.name}
+                            </button>
+                        ))}
+                        {oauthProviders.length === 0 && (
+                            <div className="col-span-2 text-center py-4 text-slate-500 border border-dashed border-slate-700 rounded-lg text-xs">
+                                No OAuth Bridges configured in Identity Gate.
+                            </div>
+                        )}
                     </div>
                 </div>
-            )}
-
-            {/* Actions */}
-            <div className="flex flex-col gap-4 mb-6">
-                {!isConfigured && (
-                    <div className="bg-blue-900/20 border border-blue-800/50 p-4 rounded-xl">
-                        <h4 className="text-sm font-bold text-blue-400 mb-1 flex items-center gap-2">
-                            <ShieldCheck size={16} /> Setup Guide
-                        </h4>
-                        <p className="text-xs text-slate-400 leading-relaxed">
-                            To connect your Google account, you must first configure your <span className="text-slate-200">Client ID</span> and <span className="text-slate-200">Secret</span> in the 
-                            <span className="text-blue-400 font-medium ml-1">Home Assistant Add-on Configuration</span> tab.
-                        </p>
-                    </div>
-                )}
-                <button 
-                    onClick={startOAuth} 
-                    disabled={!isConfigured}
-                    className={`flex-1 font-medium px-4 py-3 rounded-xl flex items-center justify-center gap-2 transition-all ${
-                        isConfigured 
-                        ? 'bg-white text-gray-900 hover:bg-gray-200 active:scale-[0.98]' 
-                        : 'bg-gray-700 text-gray-500 cursor-not-allowed'
-                    }`}
-                >
-                    <img src="https://upload.wikimedia.org/wikipedia/commons/c/c1/Google_%22G%22_logo.svg" className={`w-5 h-5 ${!isConfigured ? 'grayscale opacity-50' : ''}`} alt="Google" />
-                    {isConfigured ? 'Connect Google Account' : 'OAuth Not Configured'}
-                </button>
             </div>
 
             <div className="border-t border-gray-700 my-4"></div>

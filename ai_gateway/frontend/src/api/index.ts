@@ -32,8 +32,18 @@ export const api = {
         const res = await axios.post<ApiResponse>(`${API_BASE}settings`, { key, value });
         return res.data;
     },
-    getAuthUrl: async () => {
-        const res = await axios.get<ApiResponse<{url: string}>>(`${API_BASE}auth/google/url`);
+    // OAuth Bridge (Points to Auth Node via Ingress or direct port if local)
+    // In HA, we should probably use a relative path or the configured Auth Node URL.
+    // For now, let's assume it's reachable at /api/hassio_ingress/auth_node/api/oauth...
+    // But since we are in the AI Gateway UI, we need to know where the Auth Node is.
+    getAuthUrl: async (providerId: string) => {
+        // We use the same base logic but target the OAuth bridge on the Auth Node
+        const authBase = window.location.origin + window.location.pathname.replace(/ai_gateway\/?$/, 'auth_node');
+        return { success: true, data: { url: `${authBase}/api/oauth/start/${providerId}` } };
+    },
+    getTokens: async (providerName: string) => {
+        const authBase = window.location.origin + window.location.pathname.replace(/ai_gateway\/?$/, 'auth_node');
+        const res = await axios.get<ApiResponse<{token: string}>>(`${authBase}/api/oauth/token/${providerName}`);
         return res.data;
     }
 };
