@@ -1,15 +1,14 @@
 {
-  "last_update": "2026-02-01T22:35:00Z",
-  "version": "1.9.4",
+  "last_update": "2026-02-01T22:50:00Z",
+  "version": "1.9.5",
   "changes": [
-    "Switched to panel_custom.async_register_panel to fix AttributeError in recent Home Assistant versions",
+    "Updated default engine host to follow new naming convention (whatsapp-node)",
+    "Fixed AttributeError in __init__.py by switching to panel_custom for sidebar registration",
     "Added panel_custom to manifest dependencies",
     "Updated WhatsAppProxyView to forward to engine root for better UI/API proxying",
     "Implemented dynamic sensor discovery for tracked contacts as per hass_component.md contract",
     "Added track_contact and untrack_contact services",
     "Updated binary_sensor.py with connectivity class and last_seen attributes",
-    "Updated sensor.py with timestamp class for last_messaged",
-    "Refactored __init__.py for improved service handling and coordinator logic",
-    "Synchronized strings.json and translations with new config flow and services"
+    "Updated sensor.py with timestamp class for last_messaged"
   ]
 }

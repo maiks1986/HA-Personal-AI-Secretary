@@ -1,6 +1,6 @@
 import voluptuous as vol
 from homeassistant import config_entries, core
-from .const import DOMAIN, CONF_ENGINE_HOST, CONF_ENGINE_PORT, CONF_API_KEY, DEFAULT_ENGINE_PORT
+from .const import DOMAIN, CONF_ENGINE_HOST, CONF_ENGINE_PORT, CONF_API_KEY, DEFAULT_ENGINE_PORT, DEFAULT_ENGINE_HOST
 import logging
 import os
 
@@ -22,7 +22,7 @@ class WhatsAppConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             return self.async_show_form(
                 step_id="user",
                 data_schema=vol.Schema({
-                    vol.Required(CONF_ENGINE_HOST, default="a0d7b954-whatsapp-node-engine"): str,
+                    vol.Required(CONF_ENGINE_HOST, default=DEFAULT_ENGINE_HOST): str,
                     vol.Required(CONF_ENGINE_PORT, default=DEFAULT_ENGINE_PORT): int,
                     vol.Required(CONF_API_KEY): str,
                 }),
