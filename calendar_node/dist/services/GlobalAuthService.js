@@ -6,7 +6,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.GlobalAuthService = void 0;
 const axios_1 = __importDefault(require("axios"));
 const jsonwebtoken_1 = __importDefault(require("jsonwebtoken"));
-const AUTH_URL = process.env.AUTH_PROVIDER_URL || 'http://localhost:5006';
+const AUTH_URL = process.env.AUTH_PROVIDER_URL || 'http://auth-node:5006';
 class GlobalAuthService {
     static publicKey = null;
     static async init() {
@@ -14,7 +14,7 @@ class GlobalAuthService {
             return;
         try {
             console.log(`[GlobalAuth] Fetching Public Key from ${AUTH_URL}...`);
-            const res = await axios_1.default.get(`${AUTH_URL}/api/auth/public-key`);
+            const res = await axios_1.default.get(`${AUTH_URL}/api/auth/pubkey`);
             if (res.data) {
                 this.publicKey = res.data;
                 console.log('[GlobalAuth] Public Key loaded successfully.');
@@ -22,6 +22,18 @@ class GlobalAuthService {
         }
         catch (e) {
             console.warn(`[GlobalAuth] Failed to fetch Public Key from ${AUTH_URL}. Global Auth will be disabled.`, e.message);
+        }
+    }
+    static async getOAuthToken(provider, jwtToken) {
+        try {
+            const res = await axios_1.default.get(`${AUTH_URL}/api/oauth/token/${provider}`, {
+                headers: { 'Authorization': `Bearer ${jwtToken}` }
+            });
+            return res.data;
+        }
+        catch (e) {
+            console.error(`[GlobalAuth] Failed to fetch OAuth token for ${provider}:`, e.message);
+            return null;
         }
     }
     static verifyToken(token) {

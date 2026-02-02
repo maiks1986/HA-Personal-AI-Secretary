@@ -44,6 +44,10 @@ class GoogleAuthManager {
         this.saveTokens(tokens);
         return tokens;
     }
+    setExternalTokens(tokens) {
+        this.oauth2Client.setCredentials(tokens);
+        this.saveTokens(tokens);
+    }
     async loadTokens() {
         if (fs_1.default.existsSync(TOKEN_PATH)) {
             const tokens = JSON.parse(fs_1.default.readFileSync(TOKEN_PATH, 'utf8'));

@@ -90,6 +90,34 @@ app.get('/api/auth/url', (req, res) => {
     const url = authManager.getAuthUrl();
     res.json({ url });
 });
+app.post('/api/auth/sync-provider', async (req, res) => {
+    const authHeader = req.headers['authorization'];
+    if (!authHeader) {
+        return res.status(401).json({ error: 'Missing Authorization header' });
+    }
+    const token = authHeader.split(' ')[1];
+    try {
+        const googleTokens = await GlobalAuthService_1.GlobalAuthService.getOAuthToken('google', token);
+        if (!googleTokens) {
+            return res.status(400).json({ error: 'Failed to retrieve Google tokens from Auth Node. Ensure account is linked.' });
+        }
+        // Update the auth manager with the tokens from Auth Node
+        authManager.setExternalTokens(googleTokens);
+        db.saveInstance({
+            id: MAIN_INSTANCE_ID,
+            name: 'Main Google Account (Sync)',
+            type: 'google',
+            config: { synced_from: 'auth_node' },
+            is_active: true
+        });
+        calendarManager.syncAll().catch((err) => logger.error(err, 'Post-sync-provider sync failed'));
+        res.json({ success: true });
+    }
+    catch (err) {
+        logger.error(err, 'Failed to sync with Auth Node provider');
+        res.status(500).json({ success: false, error: err.message });
+    }
+});
 app.post('/api/auth/token', async (req, res) => {
     const validationResult = shared_schemas_1.TokenExchangeRequestSchema.safeParse(req.body);
     if (!validationResult.success) {
