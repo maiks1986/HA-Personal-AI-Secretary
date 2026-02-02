@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import axios from 'axios'
-import { KeyRound, Loader2, Users, UserPlus, Trash2, LogOut, ShieldCheck, Link2, ExternalLink, Settings } from 'lucide-react'
+import { KeyRound, Loader2, Users, UserPlus, Trash2, LogOut, ShieldCheck, Link2, ExternalLink, Settings, Hammer, Copy, Check } from 'lucide-react'
 import type { User, LoginResponse, OAuthProvider } from '@/types/shared_schemas'
 
 function App() {
@@ -18,6 +18,8 @@ function App() {
   const [newUserName, setNewUserName] = useState('')
   const [newUserPass, setNewUserPass] = useState('')
   const [newUserRole, setNewUserRole] = useState<User['role']>('user')
+  const [generatedKey, setGeneratedKey] = useState('')
+  const [copied, setCopied] = useState(false)
 
   // OAuth State
   const [providers, setProviders] = useState<OAuthProvider[]>([])
@@ -185,6 +187,25 @@ function App() {
     setShow2FA(false)
   }
 
+  const generateKey = async () => {
+    try {
+      const baseUrl = window.location.pathname.replace(/\/+$/, '');
+      const res = await axios.get(`${baseUrl}/api/auth/generate-secret`)
+      if (res.data.success) {
+        setGeneratedKey(res.data.secret)
+        setCopied(false)
+      }
+    } catch (e) {
+      alert('Failed to generate key')
+    }
+  }
+
+  const copyToClipboard = () => {
+    navigator.clipboard.writeText(generatedKey)
+    setCopied(true)
+    setTimeout(() => setCopied(false), 2000)
+  }
+
   if (user) {
     return (
       <div className="min-h-screen bg-slate-900 text-slate-100 p-4 md:p-8">
@@ -210,6 +231,30 @@ function App() {
 
           {user.role === 'admin' ? (
             <div className="space-y-8">
+              {/* System Tools Section */}
+              <div className="bg-slate-800 p-6 rounded-2xl border border-slate-700 shadow-lg">
+                <h2 className="text-lg font-semibold mb-6 flex items-center gap-2">
+                  <Hammer className="text-yellow-400" size={20} />
+                  System Tools
+                </h2>
+                <div className="flex flex-col md:flex-row gap-4 items-center">
+                   <button 
+                     onClick={generateKey}
+                     className="px-6 py-3 bg-slate-700 hover:bg-slate-600 text-slate-200 rounded-lg font-medium transition-colors border border-slate-600 flex items-center gap-2"
+                   >
+                     <KeyRound size={18} /> Generate Secure Secret
+                   </button>
+                   {generatedKey && (
+                     <div className="flex-1 w-full flex items-center gap-2 bg-slate-900 p-3 rounded-lg border border-slate-700">
+                        <code className="text-green-400 font-mono text-sm break-all flex-1">{generatedKey}</code>
+                        <button onClick={copyToClipboard} className="text-slate-400 hover:text-white transition-colors">
+                          {copied ? <Check size={18} className="text-green-500" /> : <Copy size={18} />}
+                        </button>
+                     </div>
+                   )}
+                </div>
+              </div>
+
               <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
                 {/* Add User Section */}
                 <div className="lg:col-span-1 bg-slate-800 p-6 rounded-2xl border border-slate-700 shadow-lg h-fit">

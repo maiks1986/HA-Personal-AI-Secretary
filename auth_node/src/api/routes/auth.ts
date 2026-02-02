@@ -5,6 +5,7 @@ import bcrypt from 'bcrypt';
 import jwt from 'jsonwebtoken';
 import speakeasy from 'speakeasy';
 import QRCode from 'qrcode';
+import crypto from 'crypto';
 import { CONFIG } from '../../config';
 import { keyManager } from '../../manager/KeyManager';
 
@@ -136,6 +137,12 @@ router.get('/me', (req, res) => {
 router.get('/public-key', (req, res) => {
     res.setHeader('Content-Type', 'text/plain');
     res.send(keyManager.getPublicKey());
+});
+
+// Utility for admins to generate secure tokens (e.g., for config.yaml)
+router.get('/generate-secret', ensureAdmin, (req, res) => {
+    const secret = crypto.randomBytes(32).toString('hex');
+    res.json({ success: true, secret });
 });
 
 // --- 2FA Endpoints ---

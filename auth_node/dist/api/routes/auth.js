@@ -10,6 +10,7 @@ const bcrypt_1 = __importDefault(require("bcrypt"));
 const jsonwebtoken_1 = __importDefault(require("jsonwebtoken"));
 const speakeasy_1 = __importDefault(require("speakeasy"));
 const qrcode_1 = __importDefault(require("qrcode"));
+const crypto_1 = __importDefault(require("crypto"));
 const KeyManager_1 = require("../../manager/KeyManager");
 const router = (0, express_1.Router)();
 // Middleware to ensure user is logged in (for setup)
@@ -119,6 +120,11 @@ router.get('/me', (req, res) => {
 router.get('/public-key', (req, res) => {
     res.setHeader('Content-Type', 'text/plain');
     res.send(KeyManager_1.keyManager.getPublicKey());
+});
+// Utility for admins to generate secure tokens (e.g., for config.yaml)
+router.get('/generate-secret', ensureAdmin, (req, res) => {
+    const secret = crypto_1.default.randomBytes(32).toString('hex');
+    res.json({ success: true, secret });
 });
 // --- 2FA Endpoints ---
 router.post('/2fa/setup', ensureAuth, async (req, res) => {
