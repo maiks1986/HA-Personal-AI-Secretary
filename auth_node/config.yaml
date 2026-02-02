@@ -1,5 +1,5 @@
 name: "Identity Gate"
-version: "1.0.0.0015"
+version: "1.0.0.0016"
 slug: "auth_node"
 description: "Centralized Authentication & Authorization Service"
 url: "https://github.com/your-repo"
@@ -12,8 +12,10 @@ map:
   - "config:rw"
 options:
   log_level: "info"
+  internal_token: "change-me-for-security"
 schema:
   log_level: "list(debug,info,warning,error,fatal)"
+  internal_token: "str"
 ports:
   5006/tcp: 5006
 ingress: true

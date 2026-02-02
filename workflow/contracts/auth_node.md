@@ -18,10 +18,12 @@ For addons accessed outside of Home Assistant Ingress:
 3. **Return:** Upon success, Identity Gate redirects back to the `return_to` URL with a `token` query parameter.
 4. **Validation:** The addon MUST then validate this token against the Auth Node or via Public Key.
 
-## 🔵 OAuth Bridge & SSO Policy
-*   **Centralized Tokens:** Addons request tokens via `GET http://auth-node:5006/api/oauth/token/:provider`.
-*   **Automatic Refresh:** Token refreshing is handled transparently by the Auth Node.
-*   **Pre-Approval & Linking:** Google SSO is restricted to accounts that have been manually linked. Users must first log in with their local credentials and use the "Connect" button in the dashboard to bond their Google identity to their local account.
+## 🔵 Service-to-Service Authentication (Background Tasks)
+For background tasks (e.g., `calendar_node` syncing in the background):
+1. **Header:** Use the `X-Internal-Token` header instead of `Authorization`.
+2. **Token:** The value MUST match the `internal_token` configured in the Auth Node settings.
+3. **Endpoint:** `GET http://auth-node:5006/api/oauth/token/:provider?user_id=:id`
+4. **Usage:** This allows an addon to retrieve a token for a specific user without having their active session JWT.
 
 
 ## 🔴 Required Services (Dependencies)

@@ -12,6 +12,7 @@ const DEFAULT_CONFIG = {
     dataDir: process.platform === 'win32' ? './data' : '/data',
     jwtSecret: 'dev-secret-change-me',
     logLevel: 'info',
+    internalToken: 'change-me-for-security',
 };
 function loadConfig() {
     let config = { ...DEFAULT_CONFIG };
@@ -23,6 +24,8 @@ function loadConfig() {
             // Map generic HA options if needed
             if (options.log_level)
                 config.logLevel = options.log_level;
+            if (options.internal_token)
+                config.internalToken = options.internal_token;
         }
         catch (e) {
             console.error('Failed to parse options.json', e);
@@ -35,6 +38,8 @@ function loadConfig() {
         config.dataDir = process.env.DATA_DIR;
     if (process.env.JWT_SECRET)
         config.jwtSecret = process.env.JWT_SECRET;
+    if (process.env.INTERNAL_TOKEN)
+        config.internalToken = process.env.INTERNAL_TOKEN;
     // Ensure data dir exists
     if (!fs_1.default.existsSync(config.dataDir)) {
         console.log(`Creating data directory: ${config.dataDir}`);

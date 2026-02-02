@@ -4,6 +4,7 @@ import { OAuthProviderSchema } from '../../shared_schemas';
 import axios from 'axios';
 import jwt from 'jsonwebtoken';
 import { keyManager } from '../../manager/KeyManager';
+import { CONFIG } from '../../config';
 
 const router = Router();
 
