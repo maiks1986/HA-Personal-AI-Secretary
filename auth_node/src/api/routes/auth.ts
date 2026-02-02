@@ -37,7 +37,7 @@ router.post('/login', (req: Request, res: Response) => {
         const body = LoginRequestSchema.parse(req.body);
         const user = db.getUserByUsername(body.username);
 
-        if (!user || !bcrypt.compareSync(body.password, user.password_hash)) {
+        if (!user || !user.password_hash || !bcrypt.compareSync(body.password, user.password_hash as string)) {
             const response: LoginResponse = { success: false, error: "Invalid credentials" };
             return res.status(401).json(response);
         }
@@ -95,6 +95,14 @@ router.post('/login', (req: Request, res: Response) => {
             token,
             user: { ...safeUser, is_totp_enabled: !!user.is_totp_enabled }
         };
+
+        const returnTo = req.query.return_to as string;
+        if (returnTo) {
+            // If it's a browser request, we might want to redirect
+            // But usually this is an AJAX call from our frontend.
+            // So we return the URL in the response.
+            (response as any).redirect = `${returnTo}${returnTo.includes('?') ? '&' : '?'}token=${token}`;
+        }
 
         res.json(response);
 
@@ -201,7 +209,7 @@ router.post('/users', ensureAdmin, (req, res) => {
     }
 
     try {
-        const user = db.createUser(username, password, role || 'user');
+        const user = db.createUser(username, password, role || 'user', 'local');
         res.json({ success: true, user });
     } catch (e: any) {
         if (e.message.includes('UNIQUE')) {

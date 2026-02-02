@@ -1,4 +1,4 @@
 {
-  "timestamp": "2026-02-01T18:45:00Z",
-  "description": "Final bump to 1.0.0.0013 for Auth Node to ensure Home Assistant triggers the update for User Management and routing fixes."
+  "timestamp": "2026-02-02T09:15:00Z",
+  "description": "Fixed TypeScript strict type errors in auth routes to ensure Docker build succeeds on ARM/aarch64."
 }

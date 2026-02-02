@@ -38,7 +38,7 @@ router.post('/login', (req, res) => {
     try {
         const body = shared_schemas_1.LoginRequestSchema.parse(req.body);
         const user = database_1.db.getUserByUsername(body.username);
-        if (!user || !bcrypt_1.default.compareSync(body.password, user.password_hash)) {
+        if (!user || !user.password_hash || !bcrypt_1.default.compareSync(body.password, user.password_hash)) {
             const response = { success: false, error: "Invalid credentials" };
             return res.status(401).json(response);
         }
@@ -84,6 +84,13 @@ router.post('/login', (req, res) => {
             token,
             user: { ...safeUser, is_totp_enabled: !!user.is_totp_enabled }
         };
+        const returnTo = req.query.return_to;
+        if (returnTo) {
+            // If it's a browser request, we might want to redirect
+            // But usually this is an AJAX call from our frontend.
+            // So we return the URL in the response.
+            response.redirect = `${returnTo}${returnTo.includes('?') ? '&' : '?'}token=${token}`;
+        }
         res.json(response);
     }
     catch (e) {
@@ -171,7 +178,7 @@ router.post('/users', ensureAdmin, (req, res) => {
         return res.status(400).json({ success: false, error: "Username and password required" });
     }
     try {
-        const user = database_1.db.createUser(username, password, role || 'user');
+        const user = database_1.db.createUser(username, password, role || 'user', 'local');
         res.json({ success: true, user });
     }
     catch (e) {
