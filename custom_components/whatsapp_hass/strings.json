@@ -2,25 +2,56 @@
   "config": {
     "step": {
       "user": {
-        "title": "Set up WhatsApp",
+        "title": "Connect WhatsApp Engine",
+        "description": "Enter the connection details for your WhatsApp Node Engine (usually the HA Add-on).",
         "data": {
-          "name": "Account Name",
-          "monitor_only": "Monitor Mode (Silent)"
+          "engine_host": "Engine Host (Hostname or IP)",
+          "engine_port": "Engine Port",
+          "api_key": "Internal API Key"
         }
-      },
-      "scan_qr": {
-        "title": "Scan QR Code",
-        "description": "Please scan the QR code below with your WhatsApp mobile app:\n\n{qr_code_image}"
       }
     },
     "error": {
-      "init_error": "Failed to initialize WhatsApp client.",
-      "login_check_error": "Failed to check login status.",
-      "not_logged_in": "Not logged in. Please scan the QR code."
+      "cannot_connect": "Failed to connect to the engine.",
+      "invalid_auth": "Invalid API Key.",
+      "unknown": "Unexpected error."
     },
     "abort": {
-      "already_configured": "Account is already configured.",
-      "init_error": "Failed to initialize."
+      "already_configured": "WhatsApp Engine is already configured."
+    }
+  },
+  "services": {
+    "send_message": {
+      "name": "Send Message",
+      "description": "Sends a text message to a WhatsApp contact.",
+      "fields": {
+        "instance_id": {
+          "name": "Instance ID",
+          "description": "The ID of the WhatsApp instance."
+        },
+        "contact": {
+          "name": "Contact JID",
+          "description": "The JID of the recipient (e.g. 31612345678@s.whatsapp.net)."
+        },
+        "message": {
+          "name": "Message",
+          "description": "The content of the message."
+        }
+      }
+    },
+    "generate_suggestions": {
+      "name": "Generate Suggestions",
+      "description": "Get AI-generated reply suggestions for a chat.",
+      "fields": {
+        "instance_id": {
+          "name": "Instance ID",
+          "description": "The ID of the WhatsApp instance."
+        },
+        "jid": {
+          "name": "Chat JID",
+          "description": "The JID of the chat."
+        }
+      }
     }
   }
 }

@@ -122,11 +122,25 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry):
         instance_id = call.data.get("instance_id", 1)
         await engine_api_call("POST", f"/api/groups/{instance_id}", {"title": title, "participants": participants})
 
+    async def handle_track_contact(call: ServiceCall):
+        """Track a new contact for social presence."""
+        jid = call.data.get("jid")
+        instance_id = call.data.get("instance_id", 1)
+        await engine_api_call("POST", "/api/social/tracked", {"instanceId": instance_id, "jid": jid})
+
+    async def handle_untrack_contact(call: ServiceCall):
+        """Stop tracking a contact."""
+        jid = call.data.get("jid")
+        instance_id = call.data.get("instance_id", 1)
+        await engine_api_call("DELETE", f"/api/social/tracked/{instance_id}/{jid}")
+
     # Register Services
     hass.services.async_register(DOMAIN, "send_message", handle_send_message)
     hass.services.async_register(DOMAIN, "modify_chat", handle_modify_chat)
     hass.services.async_register(DOMAIN, "set_presence", handle_set_presence)
     hass.services.async_register(DOMAIN, "create_group", handle_create_group)
+    hass.services.async_register(DOMAIN, "track_contact", handle_track_contact)
+    hass.services.async_register(DOMAIN, "untrack_contact", handle_untrack_contact)
 
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
     return True

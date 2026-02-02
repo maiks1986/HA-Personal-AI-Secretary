@@ -1,0 +1,12 @@
+{
+  "last_update": "2026-02-01T21:55:00Z",
+  "version": "1.9.2",
+  "changes": [
+    "Implemented dynamic sensor discovery for tracked contacts as per hass_component.md contract",
+    "Added track_contact and untrack_contact services",
+    "Updated binary_sensor.py with connectivity class and last_seen attributes",
+    "Updated sensor.py with timestamp class for last_messaged",
+    "Refactored __init__.py for improved service handling and coordinator logic",
+    "Synchronized strings.json and translations with new config flow and services"
+  ]
+}
