@@ -12,7 +12,6 @@ const database_1 = require("./db/database");
 const RegistryManager_1 = require("./manager/RegistryManager");
 const AiManager_1 = require("./manager/AiManager");
 const KeyManager_1 = require("./manager/KeyManager");
-const OAuthManager_1 = require("./manager/OAuthManager");
 const GlobalAuthService_1 = require("./services/GlobalAuthService");
 const authMiddleware_1 = require("./api/authMiddleware");
 const shared_schemas_1 = require("./shared_schemas");
@@ -63,34 +62,6 @@ app.get('/health', (req, res) => {
         version: process.env.npm_package_version || '0.0.1.0005',
         last_fix: lastFixes
     });
-});
-// --- Auth Routes (Contract Aligned) ---
-app.get('/auth/google/url', (req, res) => {
-    try {
-        const url = OAuthManager_1.OAuthManager.getAuthUrl();
-        res.json({ success: true, data: { url } });
-    }
-    catch (e) {
-        res.status(500).json({ success: false, error: e.message });
-    }
-});
-// Contract requires GET /auth/google/callback
-app.get('/auth/google/callback', async (req, res) => {
-    const { code } = req.query;
-    if (!code)
-        return res.status(400).send('Missing code parameter');
-    try {
-        const tokens = await OAuthManager_1.OAuthManager.exchangeCode(code);
-        // Store the main API Key or Tokens in settings/keys
-        // For simplicity and to satisfy the 'strip out' request, we'll store it as a specific key
-        KeyManager_1.KeyManager.addKey('gemini', JSON.stringify(tokens), 'Google Auth Account', 'oauth');
-        // Redirect back to dashboard or show success
-        res.send('<h1>Authentication Successful</h1><p>You can close this window and return to the AI Gateway Dashboard.</p><script>setTimeout(() => window.close(), 3000)</script>');
-    }
-    catch (e) {
-        logger.error(`Auth Callback Error: ${e.message}`);
-        res.status(500).send(`Authentication Failed: ${e.message}`);
-    }
 });
 // --- Settings API (Contract Aligned) ---
 app.get('/settings', authMiddleware_1.requireAdmin, (req, res) => {

@@ -10,6 +10,8 @@ export const UserSchema = z.object({
   created_at: z.number(),
   last_login: z.number().optional(),
   is_totp_enabled: z.boolean().optional(),
+  auth_source: z.enum(['local', 'ha', 'oauth']).default('local'),
+  external_id: z.string().optional(),
 });
 export type User = z.infer<typeof UserSchema>;
 
