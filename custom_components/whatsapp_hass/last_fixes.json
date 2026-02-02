@@ -1,8 +1,10 @@
 {
-  "last_update": "2026-02-01T22:15:00Z",
-  "version": "1.9.3",
+  "last_update": "2026-02-01T22:35:00Z",
+  "version": "1.9.4",
   "changes": [
-    "Fixed AttributeError in __init__.py by importing and using frontend component directly for panel registration",
+    "Switched to panel_custom.async_register_panel to fix AttributeError in recent Home Assistant versions",
+    "Added panel_custom to manifest dependencies",
+    "Updated WhatsAppProxyView to forward to engine root for better UI/API proxying",
     "Implemented dynamic sensor discovery for tracked contacts as per hass_component.md contract",
     "Added track_contact and untrack_contact services",
     "Updated binary_sensor.py with connectivity class and last_seen attributes",

@@ -5,7 +5,7 @@ from datetime import timedelta
 from homeassistant.core import HomeAssistant, ServiceCall
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.components.http import HomeAssistantView
-from homeassistant.components import frontend
+from homeassistant.components import frontend, panel_custom
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 from homeassistant.helpers import config_validation as cv, device_registry as dr
 from .const import DOMAIN
@@ -55,13 +55,15 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry):
     }
 
     # Register Panel
-    frontend.async_register_panel(
+    await panel_custom.async_register_panel(
         hass,
-        "whatsapp",
-        "WhatsApp",
-        "mdi:whatsapp",
+        webcomponent_name="whatsapp-panel",
+        sidebar_title="WhatsApp",
+        sidebar_icon="mdi:whatsapp",
         frontend_url_path="whatsapp",
-        module_url=None,
+        module_url="/api/whatsapp_proxy/index.html",
+        embed_iframe=True,
+        require_admin=False,
     )
 
     # Register Proxy View
@@ -160,11 +162,8 @@ class WhatsAppProxyView(HomeAssistantView):
 
     async def _handle(self, request, path):
         # Forward request to Node Engine
-        target_url = f"{self.engine_url}/api/{path}"
-        
-        # Stream data? Or simple JSON?
-        # For simplicity, assume JSON for API calls.
-        # If we need websockets, that's harder in Python Views.
+        # We forward to the root, so /api/whatsapp_proxy/api/stats -> engine_url/api/stats
+        target_url = f"{self.engine_url}/{path}"
         
         method = request.method
         data = None
