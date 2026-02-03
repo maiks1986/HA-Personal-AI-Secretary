@@ -191,7 +191,8 @@ const Debug = ({ onClose }: { onClose: () => void }) => {
             </div>
 
             <footer className="p-2 bg-slate-800 border-t border-slate-700 text-[9px] text-slate-500 text-center font-bold uppercase tracking-widest">
-                Modular Architecture &bull; V1.9.1 &bull; Total Logs: {events.length}
+                                            Modular Architecture &bull; V1.9.1.0063 &bull; Total Logs: {events.length}
+                
             </footer>
         </div>
     );
