@@ -71,6 +71,14 @@ export class CalendarManager {
     return res.data.items || [];
   }
 
+  public getDbCalendars() {
+    return this.db.getCalendars();
+  }
+
+  public updateCalendarRole(id: string, role: string) {
+    this.db.updateCalendarRole(id, role);
+  }
+
   private async syncGoogleInstance(instanceId: string) {
     const auth = this.authManagers.get(instanceId);
     if (!auth || !auth.isAuthorized()) return;

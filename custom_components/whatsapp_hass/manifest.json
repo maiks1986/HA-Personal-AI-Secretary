@@ -1,10 +1,10 @@
 {
   "domain": "whatsapp_hass",
   "name": "WhatsApp Pro",
-  "documentation": "https://github.com/maiks1986/HA-Whatsapp-intergration",
+  "documentation": "https://github.com/maiks1986/HA-Personal-AI-Secretary",
   "dependencies": ["frontend", "panel_custom"],
   "codeowners": ["@maiks86"],
-  "issue_tracker": "https://github.com/maiks1986/HA-Whatsapp-intergration/issues",
+  "issue_tracker": "https://github.com/maiks1986/HA-Personal-AI-Secretary/issues",
   "config_flow": true,
   "iot_class": "local_push",
   "version": "1.9.5"

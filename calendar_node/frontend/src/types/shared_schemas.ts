@@ -85,3 +85,42 @@ export const SyncResponseSchema = z.object({
   count: z.number(),
 });
 export type SyncResponse = z.infer<typeof SyncResponseSchema>;
+
+export const CalendarCheckRequestSchema = z.object({
+  start: z.string().datetime(),
+  end: z.string().datetime(),
+});
+export type CalendarCheckRequest = z.infer<typeof CalendarCheckRequestSchema>;
+
+export const CalendarInsertRequestSchema = z.object({
+  subject: z.string().min(1),
+  start: z.string().datetime(),
+  duration_minutes: z.number().optional().default(60),
+  description: z.string().optional(),
+});
+export type CalendarInsertRequest = z.infer<typeof CalendarInsertRequestSchema>;
+
+export const UpdateCalendarRoleRequestSchema = z.object({
+  role: CalendarRoleSchema,
+});
+export type UpdateCalendarRoleRequest = z.infer<typeof UpdateCalendarRoleRequestSchema>;
+
+
+
+export const DbCalendarSchema = z.object({
+
+  id: z.string(),
+
+  instance_id: z.string(),
+
+  external_id: z.string(),
+
+  summary: z.string(),
+
+  role: CalendarRoleSchema,
+
+  last_sync: z.string().optional(),
+
+});
+
+export type DbCalendar = z.infer<typeof DbCalendarSchema>;

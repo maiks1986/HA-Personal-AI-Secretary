@@ -1,0 +1,3 @@
+@echo off
+echo [INIT]: Reading Master Workflow...
+type ..\workflow\MASTER_WORKFLOW.md

@@ -6,7 +6,7 @@ We are building a suite of cooperating Home Assistant Add-ons that act as a "Per
 **Core Philosophy:** "Easy to Install, Modular to Maintain."
 
 ## 2. Repository Structure (Monorepo)
-The repository `HA-Whatsapp-intergration` (likely to be renamed `HA-Personal-Ecosystem` in Git) contains multiple Add-ons:
+The repository `HA-Personal-AI-Secretary` contains multiple Add-ons:
 
 ```text
 /

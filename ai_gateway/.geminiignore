@@ -1,0 +1,7 @@
+# Ignore sibling node directories and other root-level folders
+../ai_gateway/
+../auth_node/
+../calendar_node/
+../whatsapp_node/
+../custom_components/
+../whatsapp_ui/

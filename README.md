@@ -2,8 +2,8 @@
 
 This repository houses a suite of professional Home Assistant Add-ons designed to work together as a **Personal AI Secretary**. The system is modular, allowing you to install only what you need, but designed to be powerful when connected.
 
-[![Open your Home Assistant instance and open a repository inside the Home Assistant Community Store.](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=maiks1986&repository=HA-Personal-Ecosystem&category=integration)
-[![Open your Home Assistant instance and show the add-on store with a specific repository enabled.](https://my.home-assistant.io/badges/supervisor_add_repo.svg)](https://my.home-assistant.io/redirect/supervisor_add_repo/?repository=https%3A%2F%2Fgithub.com%2Fmaiks1986%2FHA-Whatsapp-intergration)
+[![Open your Home Assistant instance and open a repository inside the Home Assistant Community Store.](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=maiks1986&repository=HA-Personal-AI-Secretary&category=integration)
+[![Open your Home Assistant instance and show the add-on store with a specific repository enabled.](https://my.home-assistant.io/badges/supervisor_add_repo.svg)](https://my.home-assistant.io/redirect/supervisor_add_repo/?repository=https%3A%2F%2Fgithub.com%2Fmaiks1986%2FHA-Personal-AI-Secretary)
 
 ## 📦 The Ecosystem Modules
 

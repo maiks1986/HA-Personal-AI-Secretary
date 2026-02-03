@@ -1,6 +1,7 @@
 import express from 'express';
 import cors from 'cors';
 import pino from 'pino';
+import axios from 'axios';
 import { readFileSync, existsSync } from 'fs';
 import { join } from 'path';
 import { initDatabase, getDb } from './db/database';
@@ -29,12 +30,26 @@ function syncHaOptions() {
         try {
             const options = JSON.parse(readFileSync(optionsPath, 'utf-8'));
             const db = getDb();
-            const stmt = db.prepare('INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value');
             
+            // Sync settings table
+            const stmt = db.prepare('INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value');
             for (const [key, value] of Object.entries(options)) {
                 stmt.run(key, String(value));
             }
-            logger.info('HA Options synced to settings table.');
+
+            // Sync Gemini Keys to api_keys table
+            if (options.gemini_api_key) {
+                const keys = String(options.gemini_api_key).split(',').map(k => k.trim()).filter(k => k.length > 0);
+                keys.forEach(keyValue => {
+                    // Check if key already exists to avoid duplicates
+                    const existing = db.prepare('SELECT id FROM api_keys WHERE key_value = ?').get(keyValue);
+                    if (!existing) {
+                        KeyManager.addKey('gemini', keyValue, 'HA Option Key', 'static');
+                    }
+                });
+            }
+            
+            logger.info('HA Options synced to settings and api_keys tables.');
         } catch (e: any) {
             logger.error(`Failed to sync HA options: ${e.message}`);
         }
@@ -53,6 +68,13 @@ app.use(identityResolver);
 
 // Helper to format Zod errors
 const formatZodError = (errors: any[]) => errors.map(e => `${e.path.join('.')}: ${e.message}`).join(', ');
+
+// Helper to get internal API key
+const getInternalApiKey = () => {
+    const db = getDb();
+    const row = db.prepare('SELECT value FROM settings WHERE key = ?').get('internal_api_key') as { value: string } | undefined;
+    return row?.value;
+};
 
 // Load last fixes for health check
 let lastFixes = { timestamp: '', description: '' };
@@ -137,6 +159,16 @@ app.delete('/keys/:id', requireAdmin, (req, res) => {
 
 // --- Registry & AI (Contract Aligned) ---
 
+// List registered add-ons
+app.get('/registry/addons', requireAuth, (req, res) => {
+    try {
+        const addons = RegistryManager.listAddons();
+        res.json({ success: true, data: addons } as ApiResponse);
+    } catch (e: any) {
+        res.status(500).json({ success: false, error: e.message } as ApiResponse);
+    }
+});
+
 // Registry: Add-ons check-in here
 app.post('/registry/check-in', requireAuth, (req, res) => {
     const result = RegistrationRequestSchema.safeParse(req.body);
@@ -179,16 +211,39 @@ app.post('/bus/dispatch', requireAuth, async (req, res) => {
         return res.status(404).json({ success: false, error: `Target add-on '${target}' not found or not registered.` } as ApiResponse);
     }
 
-    // TODO: Implement actual forwarding to targetAddon.port
-    res.json({
-        success: true,
-        data: {
-            status: 'dispatched_placeholder',
-            target,
+    try {
+        const internalKey = getInternalApiKey();
+        // Construct the target URL. In HA, add-ons can talk via their slug if they are in the same network, 
+        // but here we use the port and assume they are reachable.
+        // For HA internal network: http://[slug]:[port]/api/action
+        // However, standard slug format for HA network is a0d7b954-[slug]
+        const targetUrl = `http://${target}:${targetAddon.port}/api/action`;
+        
+        logger.info(`Forwarding to ${targetUrl}`);
+        
+        const response = await axios.post(targetUrl, {
             action,
-            target_port: targetAddon.port
-        }
-    } as ApiResponse);
+            payload
+        }, {
+            headers: {
+                'x-api-key': internalKey,
+                'Content-Type': 'application/json'
+            },
+            timeout: 5000
+        });
+
+        res.json({
+            success: true,
+            data: response.data
+        } as ApiResponse);
+
+    } catch (error: any) {
+        logger.error(`Dispatch failed: ${error.message}`);
+        res.status(500).json({ 
+            success: false, 
+            error: `Failed to dispatch to '${target}': ${error.message}` 
+        } as ApiResponse);
+    }
 });
 
 // Serve static frontend

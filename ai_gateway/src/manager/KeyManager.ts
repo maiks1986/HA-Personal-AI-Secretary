@@ -33,16 +33,6 @@ export class KeyManager {
             return null;
         }
 
-        // Simplified: Just extract access token if it's a JSON blob, but no auto-refresh.
-        if (key.type === 'oauth') {
-            try {
-                const tokens = JSON.parse(key.key_value);
-                return { ...key, key_value: tokens.access_token };
-            } catch (e) {
-                return key;
-            }
-        }
-
         // Update last_used immediately to rotate
         db.prepare('UPDATE api_keys SET last_used = CURRENT_TIMESTAMP WHERE id = ?').run(key.id);
         
@@ -108,7 +98,13 @@ export class KeyManager {
             if (k.type === 'static' && k.key_value.length > 8) {
                 masked = `${k.key_value.substring(0, 4)}...${k.key_value.substring(k.key_value.length - 4)}`;
             } else if (k.type === 'oauth') {
-                masked = 'OAuth Token (Refreshable)';
+                try {
+                    const tokens = JSON.parse(k.key_value);
+                    const expiry = tokens.expiry_date ? new Date(tokens.expiry_date).toLocaleDateString() : 'Unknown';
+                    masked = `OAuth (Expires: ${expiry})`;
+                } catch (e) {
+                    masked = 'OAuth Token (Invalid JSON)';
+                }
             }
             return { ...k, key_value: masked };
         });

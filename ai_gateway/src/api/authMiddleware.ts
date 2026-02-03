@@ -1,22 +1,18 @@
 import { Request, Response, NextFunction } from 'express';
-import fs from 'fs';
 import { GlobalAuthService, AuthUser } from '../services/GlobalAuthService';
-
-const getOptions = () => {
-    try {
-        if (fs.existsSync('/data/options.json')) return JSON.parse(fs.readFileSync('/data/options.json', 'utf8'));
-    } catch (e) {}
-    return {};
-};
+import { getDb } from '../db/database';
 
 export const identityResolver = (req: Request, res: Response, next: NextFunction) => {
-    const options = getOptions();
+    const db = getDb();
     
     // 0. API Key Auth
     const apiKey = req.headers['x-api-key'] as string;
-    if (apiKey && options.internal_api_key && apiKey === options.internal_api_key) {
-        (req as any).haUser = { id: 'ha_component', isAdmin: true, source: 'api_key' } as AuthUser;
-        return next();
+    if (apiKey) {
+        const row = db.prepare('SELECT value FROM settings WHERE key = ?').get('internal_api_key') as { value: string } | undefined;
+        if (row && apiKey === row.value) {
+            (req as any).haUser = { id: 'ha_component', isAdmin: true, source: 'api_key' } as AuthUser;
+            return next();
+        }
     }
 
     // 1. Ingress Auth

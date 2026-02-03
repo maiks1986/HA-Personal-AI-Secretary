@@ -1,28 +1,28 @@
 # Plan: Repository Rename & Rebranding
 
-**Target Name:** `HA-AI-Secretary`
+**Target Name:** `HA-Personal-AI-Secretary`
 **Display Name:** "Maiks AI Secretary Add-on's"
 
 ## 🎯 Objective
-Transition the project from `HA-Whatsapp-intergration` to `HA-AI-Secretary` to reflect its evolution into a multi-module ecosystem. This involves updating code, documentation, and external registry links while minimizing disruption to existing users.
+Transition the project from `HA-Personal-AI-Secretary` to `HA-Personal-AI-Secretary` to reflect its evolution into a multi-module ecosystem. This involves updating code, documentation, and external registry links while minimizing disruption to existing users.
 
 ## 📋 Checklist
 
 ### Phase 1: Preparation (The "Safe" Changes)
 *   [ ] **Update `repository.yaml`:** Change the `name` field to "Maiks AI Secretary Add-on's".
 *   [ ] **Update `README.md`:** Update the title and introductory text to use the new branding.
-*   [ ] **Audit Hardcoded Paths:** Identify all scripts (like `run.au3` or internal `.bat` files) that rely on the absolute path `...\HA-Whatsapp-intergration`.
+*   [ ] **Audit Hardcoded Paths:** Identify all scripts (like `run.au3` or internal `.bat` files) that rely on the absolute path `...\HA-Personal-AI-Secretary`.
 
 ### Phase 2: The Rename (Execution Day)
-*   [ ] **GitHub Rename:** User manually renames the repository in GitHub Settings to `HA-AI-Secretary`.
+*   [ ] **GitHub Rename:** User manually renames the repository in GitHub Settings to `HA-Personal-AI-Secretary`.
 *   [ ] **Update Manifests:**
     *   `custom_components/whatsapp_hass/manifest.json`: Update `documentation` and `issue_tracker` URLs.
     *   `repository.yaml`: Update the `url` field to the new GitHub URL.
-*   [ ] **Search & Replace:** Perform a global find-and-replace for `HA-Whatsapp-intergration` -> `HA-AI-Secretary` in all documentation and config files.
+*   [ ] **Search & Replace:** Perform a global find-and-replace for `HA-Personal-AI-Secretary` -> `HA-Personal-AI-Secretary` in all documentation and config files.
 
 ### Phase 3: Local Environment
-*   [ ] **Rename Folder:** Rename local directory `C:\Users\Maiks\OneDrive\Bureaublad\HA-Whatsapp-intergration` to `...\HA-AI-Secretary`.
-*   [ ] **Update Git Remote:** `git remote set-url origin https://github.com/maiks1986/HA-AI-Secretary.git`
+*   [ ] **Rename Folder:** Rename local directory `C:\Users\Maiks\OneDrive\Bureaublad\HA-Personal-AI-Secretary` to `...\HA-Personal-AI-Secretary`.
+*   [ ] **Update Git Remote:** `git remote set-url origin https://github.com/maiks1986/HA-Personal-AI-Secretary.git`
 *   [ ] **Update Scripts:** Update `run.au3` and any local VS Code workspace settings to point to the new folder path.
 
 ### Phase 4: User Migration & HACS
@@ -36,5 +36,5 @@ Transition the project from `HA-Whatsapp-intergration` to `HA-AI-Secretary` to r
 When ready to execute, run the following broadcast to notify all sub-agents (if active) to update their internal references:
 
 ```batch
-workflow\send_msg.bat ALL "ATTENTION: Repository renaming to HA-AI-Secretary. Please update any internal absolute paths or git remote references immediately."
+workflow\send_msg.bat ALL "ATTENTION: Repository renaming to HA-Personal-AI-Secretary. Please update any internal absolute paths or git remote references immediately."
 ```

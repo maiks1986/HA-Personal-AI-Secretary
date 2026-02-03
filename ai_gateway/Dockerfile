@@ -24,7 +24,3 @@ COPY --from=build-frontend /app/dist/public ./dist/public
 ENV NODE_ENV=production
 EXPOSE 5005
 CMD ["npm", "start"]
-
-ENV NODE_ENV=production
-EXPOSE 5005
-CMD ["npm", "start"]

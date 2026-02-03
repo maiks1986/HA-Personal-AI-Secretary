@@ -123,6 +123,15 @@ export class CalendarDatabase {
     return this.db.prepare('SELECT * FROM calendars WHERE role = ?').all(role);
   }
 
+  public getCalendars() {
+    return this.db.prepare('SELECT * FROM calendars').all();
+  }
+
+  public updateCalendarRole(id: string, role: string) {
+    const stmt = this.db.prepare('UPDATE calendars SET role = ? WHERE id = ?');
+    stmt.run(role, id);
+  }
+
   public getEvents(startTime: string, endTime: string) {
     const stmt = this.db.prepare(`
       SELECT * FROM events 

@@ -217,6 +217,31 @@ app.get('/api/calendar/list', async (req: Request, res: Response<CalendarListEnt
   }
 });
 
+app.get('/api/calendars', (req: Request, res: Response) => {
+  try {
+    const calendars = calendarManager.getDbCalendars();
+    res.json(calendars);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.patch('/api/calendars/:id/role', (req: Request, res: Response) => {
+  const { id } = req.params;
+  const validationResult = UpdateCalendarRoleRequestSchema.safeParse(req.body);
+  
+  if (!validationResult.success) {
+    return res.status(400).json({ error: validationResult.error.errors[0].message });
+  }
+
+  try {
+    calendarManager.updateCalendarRole(id, validationResult.data.role);
+    res.json({ success: true });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 app.get('/api/calendar/events', async (req: Request, res: Response<CalendarEvent[] | { error: string }>) => {
   const { start, end } = req.query;
   try {

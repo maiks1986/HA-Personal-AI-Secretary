@@ -2,6 +2,7 @@ import { GoogleGenerativeAI } from '@google/generative-ai';
 import { getDb } from '../db/database';
 import { IntelligenceRequest } from '../shared_schemas';
 import { KeyManager } from './KeyManager';
+import { GeminiOauthClient } from './GeminiOauthClient';
 import pino from 'pino';
 
 const logger = pino();
@@ -28,44 +29,50 @@ export class AiManager {
     private static async tryGemini(request: IntelligenceRequest, history: any[], attempt: number = 1): Promise<{ reply: string, usage: any }> {
         if (attempt > 3) throw new Error('Max retries exceeded for Gemini');
 
+        const db = getDb();
+        const modelRow = db.prepare('SELECT value FROM settings WHERE key = ?').get('gemini_model') as { value: string } | undefined;
+        const modelName = modelRow?.value || "gemini-1.5-flash";
+
         const apiKey = await KeyManager.getNextKey('gemini');
         if (!apiKey) {
             throw new Error('No active Gemini keys available');
         }
 
         try {
-            const genAI = new GoogleGenerativeAI(apiKey.key_value);
-            const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+            let text: string;
 
-            // Construct Prompt with History & Context
-            const historyStr = history.reverse().map(h => `User: ${h.prompt}\nAI: ${h.reply}`).join('\n\n');
-            const contextStr = JSON.stringify(request.context);
-            
-            let fullPrompt = `Role: ${request.role}\nContext: ${contextStr}\n\n`;
-            if (historyStr) fullPrompt += `Recent History:\n${historyStr}\n\n`;
-            fullPrompt += `User Request: ${request.prompt}`;
+            if (apiKey.type === 'oauth') {
+                logger.info(`Using Gemini OAuth Client (Key ID ${apiKey.id})`);
+                const tokens = JSON.parse(apiKey.key_value);
+                const oauthClient = new GeminiOauthClient(tokens);
+                
+                // For OAuth, we might want to use a different model naming if needed,
+                // but we'll try with the configured one.
+                const prompt = this.constructFullPrompt(request, history);
+                text = await oauthClient.generateContent(prompt, modelName);
+            } else {
+                logger.info(`Using Gemini SDK (Key ID ${apiKey.id})`);
+                const genAI = new GoogleGenerativeAI(apiKey.key_value);
+                const model = genAI.getGenerativeModel({ model: modelName });
 
-            // Contract: Return valid JSON if requested
-            if (request.prompt.toLowerCase().includes('json') || request.role.toLowerCase().includes('json')) {
-                fullPrompt += "\n\nIMPORTANT: Respond with VALID JSON ONLY.";
-            }
+                const fullPrompt = this.constructFullPrompt(request, history);
+                const result = await model.generateContent(fullPrompt);
+                const response = await result.response;
+                text = response.text();
 
-            const result = await model.generateContent(fullPrompt);
-            const response = await result.response;
-            let text = response.text();
-
-            // Clean up JSON if requested (remove markdown blocks)
-            if (fullPrompt.includes('VALID JSON ONLY')) {
-                text = text.replace(/```json\n?/, '').replace(/```\n?/, '').trim();
+                // Clean up JSON if requested (remove markdown blocks)
+                if (fullPrompt.includes('VALID JSON ONLY')) {
+                    text = text.replace(/```json\n?/, '').replace(/```\n?/, '').trim();
+                }
             }
 
             // Report Success (clears error count)
             KeyManager.reportSuccess(apiKey.id);
-            this.logInteraction(request, text, 'gemini-1.5-flash');
+            this.logInteraction(request, text, modelName);
 
             return {
                 reply: text,
-                usage: { model: 'gemini-1.5-flash', tokens: -1 }
+                usage: { model: modelName, tokens: -1 }
             };
 
         } catch (error: any) {
@@ -77,6 +84,21 @@ export class AiManager {
 
             return this.tryGemini(request, history, attempt + 1);
         }
+    }
+
+    private static constructFullPrompt(request: IntelligenceRequest, history: any[]): string {
+        const historyStr = history.reverse().map(h => `User: ${h.prompt}\nAI: ${h.reply}`).join('\n\n');
+        const contextStr = JSON.stringify(request.context);
+        
+        let fullPrompt = `Role: ${request.role}\nContext: ${contextStr}\n\n`;
+        if (historyStr) fullPrompt += `Recent History:\n${historyStr}\n\n`;
+        fullPrompt += `User Request: ${request.prompt}`;
+
+        // Contract: Return valid JSON if requested
+        if (request.prompt.toLowerCase().includes('json') || request.role.toLowerCase().includes('json')) {
+            fullPrompt += "\n\nIMPORTANT: Respond with VALID JSON ONLY.";
+        }
+        return fullPrompt;
     }
 
     private static async useLocalFallback(request: IntelligenceRequest) {

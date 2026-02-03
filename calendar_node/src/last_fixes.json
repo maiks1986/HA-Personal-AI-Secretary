@@ -1,13 +1,13 @@
 {
-  "timestamp": "2026-02-02T12:05:00.000Z",
-  "description": "v1.0.0.0014: Implemented Service-to-Service Authentication (Background Tasks). Added support for X-Internal-Token header to fetch Google tokens for background sync without an active user session. Improved token authorization checks.",
+  "timestamp": "2026-02-03T10:50:00.000Z",
+  "description": "v1.0.0.0015: Implemented comprehensive Calendar Management UI. Added Dashboard with live event feed, role management for individual calendars, manual event creation, and improved sync status visibility. Updated backend with DB-driven calendar listing and role update endpoints.",
   "modules_affected": [
     "calendar_node/src/index.ts",
-    "calendar_node/src/services/GlobalAuthService.ts",
+    "calendar_node/src/db/CalendarDatabase.ts",
     "calendar_node/src/manager/CalendarManager.ts",
-    "calendar_node/src/manager/GoogleAuthManager.ts",
-    "calendar_node/src/utils.ts",
-    "calendar_node/config.yaml",
+    "calendar_node/src/shared_schemas.ts",
+    "calendar_node/frontend/src/App.tsx",
+    "calendar_node/frontend/src/components/*",
     "calendar_node/package.json"
   ]
 }
