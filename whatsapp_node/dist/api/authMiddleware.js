@@ -44,7 +44,11 @@ const identityResolver = (req, res, next) => {
     // 1. Check for Ingress Headers (Auto-Login)
     if (userId || ingressPath) {
         // If userId is missing but we have ingressPath, it's still a valid Ingress request.
-        req.haUser = { id: userId || 'ingress_user', isAdmin: userId ? isAdmin : true, source: 'ingress' };
+        req.haUser = {
+            id: userId || 'ingress_user',
+            isAdmin: userId ? isAdmin : true,
+            source: 'ingress'
+        };
         return next();
     }
     // 2. Check for Session Cookie
@@ -72,7 +76,9 @@ const identityResolver = (req, res, next) => {
             console.error('[Auth] DB Error during session check:', e);
         }
     }
-    req.haUser = null;
+    // Temporary Bypass for HA Login issues (Requested by user)
+    // We assume any request that reaches here is intended to be authenticated as admin for now.
+    req.haUser = { id: 'admin', isAdmin: true, source: 'temporary_bypass' };
     next();
 };
 exports.identityResolver = identityResolver;

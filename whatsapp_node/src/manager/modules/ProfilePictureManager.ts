@@ -33,8 +33,9 @@ export class ProfilePictureManager {
         if (this.interval) return;
         const runNext = async () => {
             await this.processNext();
-            const baseDelay = 5000;
-            const nextDelay = this.traffic.getAdaptiveDelay(baseDelay);
+            const baseDelay = 15000; // Increased from 5s to 15s
+            const randomDelay = Math.floor(baseDelay * (0.8 + Math.random() * 0.7)); // 12s to 22.5s
+            const nextDelay = this.traffic.getAdaptiveDelay(randomDelay);
             this.interval = setTimeout(runNext, nextDelay);
         };
         runNext();

@@ -2,7 +2,7 @@ import axios from 'axios';
 import jwt from 'jsonwebtoken';
 import { AuthUser } from '../types';
 
-const AUTH_URL = process.env.AUTH_PROVIDER_URL || 'http://localhost:5006';
+const AUTH_URL = process.env.AUTH_PROVIDER_URL || 'http://auth-node:5006';
 
 export class GlobalAuthService {
     private static publicKey: string | null = null;
@@ -12,7 +12,7 @@ export class GlobalAuthService {
 
         try {
             console.log(`[GlobalAuth] Fetching Public Key from ${AUTH_URL}...`);
-            const res = await axios.get(`${AUTH_URL}/api/auth/public-key`);
+            const res = await axios.get(`${AUTH_URL}/api/auth/pubkey`);
             if (res.data) {
                 this.publicKey = res.data;
                 console.log('[GlobalAuth] Public Key loaded successfully.');

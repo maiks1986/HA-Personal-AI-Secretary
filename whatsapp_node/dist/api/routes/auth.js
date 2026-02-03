@@ -14,19 +14,22 @@ const authRouter = (getAddonConfig) => {
     router.get('/status', (req, res) => {
         const user = req.haUser;
         let newToken;
-        // Auto-create session for Ingress users if they don't have a token
-        if (user && user.source === 'ingress') {
+        // Auto-create session for Ingress or Bypassed users if they don't have a token
+        if (user && (user.source === 'ingress' || user.source === 'temporary_bypass')) {
             const db = (0, database_1.getDb)();
-            // Check if we already have a session for this user (optional optimization, but simplified for now: just create a new one if requested)
-            // Actually, we want to give the frontend a token so it can persist it.
-            newToken = (0, uuid_1.v4)();
-            try {
-                db.prepare('INSERT INTO sessions (token, user_id, is_admin) VALUES (?, ?, ?)').run(newToken, user.id, user.isAdmin ? 1 : 0);
-                // Set cookie for convenience
-                res.cookie('direct_token', newToken, { maxAge: 30 * 24 * 60 * 60 * 1000, httpOnly: false });
-            }
-            catch (e) {
-                console.error("Failed to persist auto-session", e);
+            // Check for existing valid session token in request first (already checked in middleware, but we want to know if it's new)
+            const currentToken = req.headers.cookie?.split('; ').find(row => row.startsWith('direct_token='))?.split('=')[1]
+                || req.headers['authorization']?.split(' ')[1];
+            if (!currentToken) {
+                newToken = (0, uuid_1.v4)();
+                try {
+                    db.prepare('INSERT INTO sessions (token, user_id, is_admin) VALUES (?, ?, ?)').run(newToken, user.id, user.isAdmin ? 1 : 0);
+                    // Set cookie for convenience
+                    res.cookie('direct_token', newToken, { maxAge: 30 * 24 * 60 * 60 * 1000, httpOnly: false });
+                }
+                catch (e) {
+                    console.error("Failed to persist auto-session", e);
+                }
             }
         }
         res.json({

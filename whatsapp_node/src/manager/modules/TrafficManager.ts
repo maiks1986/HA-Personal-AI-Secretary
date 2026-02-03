@@ -18,9 +18,16 @@ export class TrafficManager {
     private queue: QueuedTask[] = [];
     private processing = false;
     private lastRequestTime = 0;
-    private minDelay = 1000; // Minimum ms between ANY requests to WA (1 req/sec)
+    private baseDelay = 1200; // Average ms between ANY requests to WA
 
     constructor(private instanceId: number) {}
+
+    private getNextDelay(): number {
+        // Randomize delay between 80% and 150% of baseDelay
+        const min = this.baseDelay * 0.8;
+        const max = this.baseDelay * 1.5;
+        return Math.floor(Math.random() * (max - min + 1) + min);
+    }
 
     /**
      * Enqueue a task for execution with priority.
@@ -68,11 +75,13 @@ export class TrafficManager {
 
         const task = this.queue.shift()!;
         
-        // Rate limiting: Ensure minDelay between requests
+        // Rate limiting: Ensure randomized delay between requests
         const now = Date.now();
         const timeSinceLast = now - this.lastRequestTime;
-        if (timeSinceLast < this.minDelay) {
-            await new Promise(r => setTimeout(r, this.minDelay - timeSinceLast));
+        const currentDelay = this.getNextDelay();
+
+        if (timeSinceLast < currentDelay) {
+            await new Promise(r => setTimeout(r, currentDelay - timeSinceLast));
         }
 
         try {

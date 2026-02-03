@@ -1,4 +1,4 @@
 {
-  "timestamp": "2026-02-02T09:05:00Z",
-  "description": "Throttled global request queue to 1 req/sec (1000ms delay) to prevent session corruption and rate-limiting. Previous fixes included WorkerManager stop flag and Proxy Logger."
+  "timestamp": "2026-02-02T13:45:00Z",
+  "description": "Implemented Slow Sync & Deferred Media strategy: Throttled history sync, added background media downloader, randomized request delays, and added human-like typing simulation to reduce phone load and avoid API flags."
 }

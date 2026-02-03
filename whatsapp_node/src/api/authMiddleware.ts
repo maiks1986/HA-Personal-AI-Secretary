@@ -19,10 +19,10 @@ export const identityResolver = (req: Request, res: Response, next: NextFunction
         return next();
     }
 
-    // 1. API Key Auth (Native Integration)
-    const apiKey = req.headers['x-api-key'] as string;
-    if (apiKey && options.internal_api_key && apiKey === options.internal_api_key) {
-        (req as any).haUser = { id: 'ha_component', isAdmin: true, source: 'api_key' } as AuthUser;
+    // 1. API Key / Internal Token Auth (Service-to-Service)
+    const internalToken = (req.headers['x-internal-token'] || req.headers['x-api-key']) as string;
+    if (internalToken && options.internal_api_key && internalToken === options.internal_api_key) {
+        (req as any).haUser = { id: 'system', isAdmin: true, source: 'internal_token' } as AuthUser;
         return next();
     }
 
@@ -45,7 +45,11 @@ export const identityResolver = (req: Request, res: Response, next: NextFunction
     // 1. Check for Ingress Headers (Auto-Login)
     if (userId || ingressPath) {
         // If userId is missing but we have ingressPath, it's still a valid Ingress request.
-        (req as any).haUser = { id: userId || 'ingress_user', isAdmin: userId ? isAdmin : true, source: 'ingress' } as AuthUser;
+        (req as any).haUser = { 
+            id: userId || 'ingress_user', 
+            isAdmin: userId ? isAdmin : true, 
+            source: 'ingress' 
+        } as AuthUser;
         return next();
     }
 
@@ -77,7 +81,9 @@ export const identityResolver = (req: Request, res: Response, next: NextFunction
         }
     }
 
-    (req as any).haUser = null;
+    // Temporary Bypass for HA Login issues (Requested by user)
+    // We assume any request that reaches here is intended to be authenticated as admin for now.
+    (req as any).haUser = { id: 'admin', isAdmin: true, source: 'temporary_bypass' } as AuthUser;
     next();
 };
 

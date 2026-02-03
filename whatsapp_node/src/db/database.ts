@@ -195,6 +195,8 @@ export function initDatabase() {
     ensureColumn('messages', 'vcard_data', 'TEXT');
     ensureColumn('messages', 'parent_message_id', 'TEXT');
     ensureColumn('messages', 'status', "TEXT DEFAULT 'sent'");
+    ensureColumn('messages', 'media_download_status', "TEXT DEFAULT 'none'"); // none, pending, downloading, success, failed
+    ensureColumn('messages', 'raw_message', 'TEXT'); // Full JSON for deferred media download
 
     // Contact Migrations
     ensureColumn('contacts', 'lid', 'TEXT');

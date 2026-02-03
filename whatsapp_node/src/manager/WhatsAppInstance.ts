@@ -119,15 +119,24 @@ export class WhatsAppInstance {
                 }
             }
     
+            private lastRepairTime: number = 0;
+    
             private handleDecryptionError() {
                 this.decryptionErrorCount++;
                 if (this.decryptionErrorCount % 5 === 1) { // Log every 5th or first
                     console.warn(`[Instance ${this.id}]: Decryption Error Detected! Count: ${this.decryptionErrorCount}/20`);
                 }
         
-                if (this.decryptionErrorCount >= 20) { // Increased to 20 to avoid over-aggressive resets during bursts
+                if (this.decryptionErrorCount >= 20) { 
+                    const now = Date.now();
+                    if (now - this.lastRepairTime < 600000) { // 10 minute cooldown
+                        console.warn(`[Instance ${this.id}]: High Decryption Errors, but repair is on cooldown. Waiting for stability...`);
+                        return;
+                    }
+
                     console.error(`[Instance ${this.id}]: CRITICAL - Zombie Session Detected (20+ Bad MACs). Triggering Soft Repair.`);
                     this.decryptionErrorCount = 0;
+                    this.lastRepairTime = now;
                     this.softWipeSyncState().then(() => this.reconnect());
                 }
                 
@@ -306,7 +315,8 @@ export class WhatsAppInstance {
                     this.request.bind(this), 
                     () => this.status, 
                     () => this.reconnect(),
-                    this.trafficManager
+                    this.trafficManager,
+                    this.messageManager
                 );
                 
                 this.chatManager = new ChatManager(this.id, this.request.bind(this), this.io);
@@ -552,7 +562,27 @@ export class WhatsAppInstance {
 
     async sendMessage(jid: string, text: string) {
         if (!this.sock || this.status !== 'connected') throw new Error("Instance not connected");
-        await this.request(async (sock) => await sock.sendMessage(normalizeJid(jid), { text }), Priority.HIGH);
+        
+        const targetJid = normalizeJid(jid);
+
+        // 1. Simulate Human-like behavior: Presence -> Composing -> Wait -> Send
+        await this.request(async (sock) => {
+            // Subscribe to presence (looks like we are looking at the chat)
+            await sock.presenceSubscribe(targetJid);
+            await new Promise(r => setTimeout(r, 500 + Math.random() * 1000));
+            
+            // Start typing
+            await sock.sendPresenceUpdate('composing', targetJid);
+            
+            // Wait based on text length (simulating typing speed: ~200-300 chars per minute)
+            // But with a cap to not wait too long for huge messages
+            const typingTime = Math.min(Math.max(text.length * 50, 1500), 5000) + (Math.random() * 1000);
+            await new Promise(r => setTimeout(r, typingTime));
+            
+            // Stop typing and send
+            await sock.sendPresenceUpdate('paused', targetJid);
+            return await sock.sendMessage(targetJid, { text });
+        }, Priority.HIGH);
     }
 
     // Delegated methods

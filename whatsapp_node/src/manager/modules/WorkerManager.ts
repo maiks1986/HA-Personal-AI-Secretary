@@ -1,11 +1,13 @@
-import { WASocket } from '@whiskeysockets/baileys';
+import { WASocket, WAMessage } from '@whiskeysockets/baileys';
 import { getDb } from '../../db/database';
 import { normalizeJid } from '../../utils';
 import { TrafficManager, Priority } from './TrafficManager';
+import { MessageManager } from './MessageManager';
 
 export class WorkerManager {
     private namingWorker: NodeJS.Timeout | null = null;
     private historyWorker: NodeJS.Timeout | null = null;
+    private mediaWorker: NodeJS.Timeout | null = null;
     private nudgeTimer: NodeJS.Timeout | null = null;
     private running: boolean = false;
 
@@ -14,13 +16,15 @@ export class WorkerManager {
         private request: <T>(execute: (sock: WASocket) => Promise<T>, priority?: Priority) => Promise<T>, 
         private status: () => string, 
         private reconnect: () => void,
-        private traffic: TrafficManager
+        private traffic: TrafficManager,
+        private messageManager: MessageManager
     ) {}
 
     startAll() {
         this.running = true;
         this.startNamingWorker();
         this.startDeepHistoryWorker();
+        this.startMediaDownloadWorker();
         this.startAutoNudgeWorker();
     }
 
@@ -28,9 +32,11 @@ export class WorkerManager {
         this.running = false;
         if (this.namingWorker) clearInterval(this.namingWorker);
         if (this.historyWorker) clearTimeout(this.historyWorker);
+        if (this.mediaWorker) clearTimeout(this.mediaWorker);
         if (this.nudgeTimer) clearInterval(this.nudgeTimer);
         this.namingWorker = null;
         this.historyWorker = null;
+        this.mediaWorker = null;
         this.nudgeTimer = null;
     }
 
@@ -50,7 +56,7 @@ export class WorkerManager {
                     OR name LIKE '%@s.whatsapp.net' 
                     OR name GLOB '[0-9]*' -- Starts with a digit
                 )
-                LIMIT 5
+                LIMIT 2
             `).all(this.instanceId) as any[];
 
             for (const chat of unnamed) {
@@ -116,7 +122,7 @@ export class WorkerManager {
                 }
             }
 
-        }, 60000); // Check every 60s
+        }, 120000); // Check every 120s (2 minutes)
     }
 
     private startDeepHistoryWorker() {
@@ -126,16 +132,19 @@ export class WorkerManager {
             if (!this.running) return;
             
             if (this.status() !== 'connected') {
-                this.historyWorker = setTimeout(runCycle, 10000);
+                this.historyWorker = setTimeout(runCycle, 15000);
                 return;
             }
 
             const db = getDb();
             const delaySetting = db.prepare('SELECT value FROM settings WHERE key = ?').get('sync_delay_ms') as any;
-            let baseDelay = delaySetting?.value ? parseInt(delaySetting.value) : 5000; 
+            let baseDelay = delaySetting?.value ? parseInt(delaySetting.value) : 8000; // Increased default from 5s to 8s
+            
+            // Randomize cycle delay (70% to 130% of baseDelay)
+            const randomDelay = Math.floor(baseDelay * (0.7 + Math.random() * 0.6));
             
             // ADAPTIVE BACKOFF: Slow down if traffic queue is long
-            let nextDelay = this.traffic.getAdaptiveDelay(baseDelay);
+            let nextDelay = this.traffic.getAdaptiveDelay(randomDelay);
 
             const chat = db.prepare(`
                 SELECT jid FROM chats 
@@ -167,6 +176,9 @@ export class WorkerManager {
                     nextDelay = 1000; // Faster transition to next chat
                 } else if (Array.isArray(result)) {
                     console.log(`[Sync Worker ${this.instanceId}]: Received ${result.length} historical messages for ${chat.jid}`);
+                    for (const msg of result) {
+                        await this.messageManager.saveMessageToDb(msg, true); // Always skip media during deep sync
+                    }
                 }
             } catch (e: any) {
                 if (this.running) console.error(`[Sync Worker ${this.instanceId}]: Error during sync for ${chat.jid}:`, e.message);
@@ -174,6 +186,63 @@ export class WorkerManager {
             }
 
             if (this.running) this.historyWorker = setTimeout(runCycle, nextDelay);
+        };
+
+        runCycle();
+    }
+
+    private startMediaDownloadWorker() {
+        if (this.mediaWorker) return;
+
+        const runCycle = async () => {
+            if (!this.running) return;
+
+            if (this.status() !== 'connected') {
+                this.mediaWorker = setTimeout(runCycle, 20000);
+                return;
+            }
+
+            const db = getDb();
+            const pending = db.prepare(`
+                SELECT * FROM messages 
+                WHERE instance_id = ? AND media_download_status = 'pending'
+                ORDER BY timestamp DESC
+                LIMIT 1
+            `).get(this.instanceId) as any;
+
+            if (!pending) {
+                // No pending media, check again in 2 minutes
+                if (this.running) this.mediaWorker = setTimeout(runCycle, 120000);
+                return;
+            }
+
+            let nextDelay = 10000 + Math.random() * 10000; // 10-20s between background media downloads
+
+            try {
+                if (!pending.raw_message) {
+                    db.prepare("UPDATE messages SET media_download_status = 'failed' WHERE id = ?").run(pending.id);
+                    if (this.running) this.mediaWorker = setTimeout(runCycle, 1000);
+                    return;
+                }
+
+                const msgObj = JSON.parse(pending.raw_message) as WAMessage;
+                console.log(`[Media Worker]: Downloading deferred media for ${pending.whatsapp_id}...`);
+                
+                const path = await this.messageManager.downloadMedia(msgObj);
+                
+                if (path) {
+                    db.prepare("UPDATE messages SET media_path = ?, media_download_status = 'success', raw_message = NULL WHERE id = ?")
+                        .run(path, pending.id);
+                } else {
+                    db.prepare("UPDATE messages SET media_download_status = 'failed' WHERE id = ?").run(pending.id);
+                }
+
+            } catch (e) {
+                console.error(`[Media Worker]: Failed to process ${pending.whatsapp_id}`, e);
+                db.prepare("UPDATE messages SET media_download_status = 'failed' WHERE id = ?").run(pending.id);
+            }
+
+            if (this.running) this.mediaWorker = setTimeout(runCycle, nextDelay);
         };
 
         runCycle();

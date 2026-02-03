@@ -61,7 +61,7 @@ export interface StatusUpdate {
 
 export interface AuthStatusResponse {
     authenticated: boolean;
-    source: 'ingress' | 'direct' | null;
+    source: 'ingress' | 'direct' | 'dev' | 'config_bypass' | 'api_key' | 'global_auth' | 'temporary_bypass' | null;
     isAdmin: boolean;
     needsPassword: boolean;
     token?: string;

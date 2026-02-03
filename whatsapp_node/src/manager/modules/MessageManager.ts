@@ -64,8 +64,8 @@ export class MessageManager {
 
         // 3. Process historical messages
         if (messages) {
-            console.log(`[Sync ${this.instanceId}]: Saving ${messages.length} historical messages...`);
-            for (const msg of messages) await this.saveMessageToDb(msg);
+            console.log(`[Sync ${this.instanceId}]: Saving ${messages.length} historical messages (skipping media)...`);
+            for (const msg of messages) await this.saveMessageToDb(msg, true);
         }
         this.io.emit('chat_update', { instanceId: this.instanceId });
     }
@@ -189,7 +189,28 @@ export class MessageManager {
         return jid;
     }
 
-    async saveMessageToDb(m: WAMessage) {
+    async downloadMedia(m: WAMessage): Promise<string | null> {
+        try {
+            const message = m.message;
+            if (!message) return null;
+            const mediaType = Object.keys(message)[0];
+            const type = mediaType.replace('Message', '');
+            const whatsapp_id = m.key.id;
+
+            const buffer = await downloadMediaMessage(m, 'buffer', {}, { logger: this.logger, reuploadRequest: this.sock.updateMediaMessage });
+            const fileName = `${whatsapp_id}.${type === 'audio' ? 'ogg' : type === 'image' ? 'jpg' : type === 'video' ? 'mp4' : 'bin'}`;
+            const dir = process.env.NODE_ENV === 'development' ? path.join(__dirname, '../../../media') : '/data/media';
+            if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+            const media_path = path.join(dir, fileName);
+            fs.writeFileSync(media_path, buffer);
+            return media_path;
+        } catch (e) {
+            console.error(`[MessageManager]: Media download failed for ${m.key.id}`, e);
+            return null;
+        }
+    }
+
+    async saveMessageToDb(m: WAMessage, skipMedia: boolean = false) {
         try {
             const message = m.message;
             if (!message) return;
@@ -255,22 +276,24 @@ export class MessageManager {
             let text = message.conversation || message.extendedTextMessage?.text || "";
             let type: any = 'text';
             let media_path = null;
+            let media_download_status = 'none';
             let latitude = null;
             let longitude = null;
             let vcard_data = null;
+            let raw_message_json = null;
 
             const mediaType = Object.keys(message)[0];
             if (['imageMessage', 'videoMessage', 'audioMessage', 'documentMessage', 'stickerMessage'].includes(mediaType)) {
                 type = mediaType.replace('Message', '');
                 text = (message as any)[mediaType]?.caption || "";
-                try {
-                    const buffer = await downloadMediaMessage(m, 'buffer', {}, { logger: this.logger, reuploadRequest: this.sock.updateMediaMessage });
-                    const fileName = `${whatsapp_id}.${type === 'audio' ? 'ogg' : type === 'image' ? 'jpg' : type === 'video' ? 'mp4' : 'bin'}`;
-                    const dir = process.env.NODE_ENV === 'development' ? path.join(__dirname, '../../../media') : '/data/media';
-                    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-                    media_path = path.join(dir, fileName);
-                    fs.writeFileSync(media_path, buffer);
-                } catch (e) {}
+                
+                if (!skipMedia) {
+                    media_path = await this.downloadMedia(m);
+                    media_download_status = media_path ? 'success' : 'failed';
+                } else {
+                    media_download_status = 'pending';
+                    raw_message_json = JSON.stringify(m);
+                }
             }
 
             if (message.pollCreationMessage || message.pollCreationMessageV2 || message.pollCreationMessageV3) {
@@ -313,7 +336,7 @@ export class MessageManager {
             // FILTER: STRICTER - Skip empty text messages (prevents ghost messages from protocol events/syncs)
             const isTextType = type === 'text';
             const hasNoContent = !text || text.trim().length === 0;
-            const hasNoMedia = !media_path;
+            const hasNoMedia = !media_path && media_download_status === 'none';
             const hasNoVcard = !vcard_data;
             const hasNoLocation = !latitude && !longitude;
 
@@ -325,10 +348,15 @@ export class MessageManager {
             // Save Message
             db.prepare(`
                 INSERT INTO messages 
-                (instance_id, whatsapp_id, chat_jid, sender_jid, sender_name, text, type, media_path, latitude, longitude, vcard_data, status, timestamp, is_from_me) 
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                ON CONFLICT(whatsapp_id) DO UPDATE SET text = excluded.text, status = excluded.status
-            `).run(this.instanceId, whatsapp_id, jid, sender_jid, senderName, text, type, media_path, latitude, longitude, vcard_data, 'sent', timestamp, is_from_me);
+                (instance_id, whatsapp_id, chat_jid, sender_jid, sender_name, text, type, media_path, media_download_status, raw_message, latitude, longitude, vcard_data, status, timestamp, is_from_me) 
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(whatsapp_id) DO UPDATE SET 
+                    text = excluded.text, 
+                    status = excluded.status,
+                    media_path = COALESCE(excluded.media_path, messages.media_path),
+                    media_download_status = CASE WHEN excluded.media_download_status != 'none' THEN excluded.media_download_status ELSE messages.media_download_status END,
+                    raw_message = COALESCE(excluded.raw_message, messages.raw_message)
+            `).run(this.instanceId, whatsapp_id, jid, sender_jid, senderName, text, type, media_path, media_download_status, raw_message_json, latitude, longitude, vcard_data, 'sent', timestamp, is_from_me);
 
             if (is_from_me === 1 && this.socialCallback) {
                 this.socialCallback(jid);
