@@ -1,0 +1,14 @@
+# AFTER REBOOT INSTRUCTIONS
+
+1. Rename the folder on your desktop to:
+   HA-Personal-AI-Secretary
+
+2. Open a terminal (PowerShell or CMD) inside that folder.
+
+3. Run this command to update your GitHub link:
+   git remote set-url origin https://github.com/maiks1986/HA-Personal-AI-Secretary.git
+
+4. Verify it worked by running:
+   git remote -v
+
+Everything in the code (README, manifest, scripts) has already been updated to match this new name.
