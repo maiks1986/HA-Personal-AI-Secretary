@@ -25,11 +25,12 @@ dist/
 whatsapp_ui/whatsapp.db
 whatsapp_ui/config.json
 
-# Secrets (just in case)
+# Secrets & Config
 .env
 start_gemini_yolo.bat
 */start_gemini_*.bat
 GEMINI.md
+*.pem
 
 # Logs
 logs/
@@ -37,13 +38,15 @@ npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 
-# Documentation
+# Workflow & Local (Private)
 workflow/
-plans/
 whatsapp_node/workflow/
 calendar_node/workflow/
 read_workflow.bat
+_trash/
 
-# Add-on Data & Secrets
+# Add-on Data
 auth_node/data/
-*.pem
+
+# Temporary
+MASTER_WORKFLOW_TEMP.md

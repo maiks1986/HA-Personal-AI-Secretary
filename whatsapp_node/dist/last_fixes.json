@@ -1,4 +1,0 @@
-{
-  "timestamp": "2026-02-02T09:05:00Z",
-  "description": "Throttled global request queue to 1 req/sec (1000ms delay) to prevent session corruption and rate-limiting. Previous fixes included WorkerManager stop flag and Proxy Logger."
-}

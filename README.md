@@ -1,53 +1,61 @@
-# Maiks AI Secretary Add-ons
+# Maiks AI Secretary Ecosystem
 
-This repository provides a suite of professional Home Assistant Add-ons designed to act as a **Personal AI Secretary**. Currently focusing on a browserless WhatsApp integration, with Google Calendar and Mail modules coming soon.
+This repository houses a suite of professional Home Assistant Add-ons designed to work together as a **Personal AI Secretary**. The system is modular, allowing you to install only what you need, but designed to be powerful when connected.
 
 [![Open your Home Assistant instance and open a repository inside the Home Assistant Community Store.](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=maiks1986&repository=HA-Personal-Ecosystem&category=integration)
 [![Open your Home Assistant instance and show the add-on store with a specific repository enabled.](https://my.home-assistant.io/badges/supervisor_add_repo.svg)](https://my.home-assistant.io/redirect/supervisor_add_repo/?repository=https%3A%2F%2Fgithub.com%2Fmaiks1986%2FHA-Whatsapp-intergration)
 
-## 📦 Available Add-ons
+## 📦 The Ecosystem Modules
 
-### 1. WhatsApp Node Engine (Social & Presence)
-The core messaging engine handling the heavy lifting using the stable Baileys library.
-*   **Features:** Multi-device support, Presence Sensors (HA integration), AI Message Drafting, Ephemeral Mode.
-*   **Installation:** In Home Assistant, go to **Settings > Add-ons > Add-on Store**, add this repo, search for **"WhatsApp Node Engine"** and click **Install**.
+### 1. 🧠 AI Gateway (`ai_gateway`)
+**The Central Brain.**
+*   **Purpose:** Routes intelligence and API requests between all other add-ons.
+*   **Features:** Centralized Gemini API management, System Prompts, and inter-service communication bus.
+*   **Why install?** Required for AI features in WhatsApp and Calendar.
 
-### 2. Identity Gate (Authentication Service)
-The centralized security hub for the ecosystem.
-*   **Features:** User Management, JWT Issuance, Role-Based Access Control, Two-Factor Authentication (2FA).
-*   **Purpose:** Allows secure remote access to the WhatsApp/Calendar UI without exposing the entire Home Assistant instance.
+### 2. 💬 WhatsApp Node (`whatsapp_node`)
+**The Communication Hub.**
+*   **Purpose:** A powerful, browserless WhatsApp client for Home Assistant.
+*   **Features:**
+    *   **No Phone Required:** Runs on the server (Baileys engine).
+    *   **Sidebar UI:** Full chat interface inside Home Assistant.
+    *   **AI Drafting:** Smart reply suggestions powered by the Gateway.
+    *   **Home Assistant Integration:** Trigger automations based on incoming messages.
 
-### 3. Google Calendar Master (Coming Soon)
-A specialized module to manage complex scheduling and conflict resolution.
+### 3. 📅 Calendar Master (`calendar_node`)
+**The Scheduler.**
+*   **Purpose:** Advanced Google Calendar integration.
+*   **Features:**
+    *   Deep bi-directional sync with Google Calendar.
+    *   Conflict resolution and "Day Briefing" generation.
+    *   Can be queried by the AI Gateway to answer availability questions.
+
+### 4. 🛡️ Identity Gate (`auth_node`)
+**The Security Layer.**
+*   **Purpose:** Centralized authentication for the ecosystem.
+*   **Features:**
+    *   Manages JWTs and API Tokens for external access.
+    *   Ensures only authorized users access the Secretary dashboards.
 
 ---
 
-## 🚀 Installation (WhatsApp)
+## 🚀 Installation Guide
 
-### 2. Install the Integration (HACS)
-The integration connects Home Assistant to the engine.
-*   Click the **"HACS"** button above to add it.
-*   Restart Home Assistant.
-*   Go to **Settings > Devices & Services > Add Integration**.
-*   Search for **"WhatsApp Integration"**.
+1.  **Add the Repository:**
+    *   Click the "Add to Home Assistant" button above, or manually add this repository URL to your Add-on Store.
+2.  **Install Core Modules:**
+    *   Install **AI Gateway** (Required for intelligence).
+    *   Install **WhatsApp Node** (For messaging).
+    *   Install **Calendar Master** (Optional, for scheduling).
+3.  **Install the Integration:**
+    *   Search for "WhatsApp Integration" in HACS or Devices & Services to connect the add-ons to your Home Assistant entities.
 
 ---
 
-## 🛠 Features
-*   **No Browser Needed:** Runs natively on Raspberry Pi (no RAM-hungry Chrome).
-*   **Type-Safe:** Engine written in TypeScript for maximum stability.
-*   **Multi-Device:** Your phone doesn't need to stay online.
-*   **Sidebar Dashboard:** Access your chats directly from the Home Assistant sidebar.
-
-## 📖 Usage
-Once connected, you can send messages via the `whatsapp_hass.send_message` service:
-
-```yaml
-service: whatsapp_hass.send_message
-data:
-  contact: "31612345678" # Phone number with country code
-  message: "Hello from Home Assistant!"
-```
+## 🛠 Features Overview
+*   **Privacy First:** All database storage (`sqlite`) is local to your machine.
+*   **Type-Safe:** All modules are written in TypeScript for maximum stability.
+*   **Modular:** If one module updates or restarts, the others keep running.
 
 ---
 *Maintained by Maiks*
