@@ -24,7 +24,8 @@ export function initDatabase() {
             status TEXT DEFAULT 'disconnected',
             presence TEXT DEFAULT 'available',
             qr TEXT,
-            last_seen DATETIME
+            last_seen DATETIME,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP
         )
     `).run();
 
@@ -162,6 +163,8 @@ export function initDatabase() {
             jid TEXT,
             last_online DATETIME,
             last_outbound_timestamp DATETIME,
+            last_inbound_timestamp DATETIME,
+            status_since DATETIME,
             today_duration INTEGER DEFAULT 0,
             PRIMARY KEY (instance_id, jid)
         )
@@ -178,6 +181,9 @@ export function initDatabase() {
             db.prepare(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`).run();
         }
     };
+
+    // Instance Migrations
+    ensureColumn('instances', 'created_at', 'DATETIME DEFAULT CURRENT_TIMESTAMP');
 
     // Chat Migrations
     ensureColumn('chats', 'is_archived', 'INTEGER DEFAULT 0');
@@ -204,6 +210,8 @@ export function initDatabase() {
 
     // Social Tracking Migrations
     ensureColumn('tracked_contacts', 'last_outbound_timestamp', 'DATETIME');
+    ensureColumn('tracked_contacts', 'last_inbound_timestamp', 'DATETIME');
+    ensureColumn('tracked_contacts', 'status_since', 'DATETIME');
 
     // Ephemeral Message Migrations
     ensureColumn('chats', 'ephemeral_mode', 'INTEGER DEFAULT 0');

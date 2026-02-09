@@ -1,0 +1,38 @@
+CONTENT_START
+{
+  "name": "whatsapp-ha-engine",
+  "version": "1.9.1.0064",
+  "description": "Browserless WhatsApp Engine for Home Assistant",
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "tsc && node -e \"require('fs').copyFileSync('src/last_fixes.json', 'dist/last_fixes.json')\"",
+    "start": "node dist/index.js",
+    "dev": "ts-node src/index.ts"
+  },
+  "dependencies": {
+    "@google/generative-ai": "^0.24.1",
+    "@whiskeysockets/baileys": "^6.7.9",
+    "axios": "^1.7.2",
+    "better-sqlite3": "^11.0.0",
+    "cors": "^2.8.5",
+    "express": "^4.19.2",
+    "jsonwebtoken": "^9.0.3",
+    "node-cache": "^5.1.2",
+    "pino": "^9.2.0",
+    "qrcode": "^1.5.3",
+    "socket.io": "^4.7.5",
+    "uuid": "^10.0.0"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^7.6.10",
+    "@types/cors": "^2.8.17",
+    "@types/express": "^4.17.21",
+    "@types/jsonwebtoken": "^9.0.10",
+    "@types/node": "^20.14.9",
+    "@types/qrcode": "^1.5.5",
+    "@types/uuid": "^10.0.0",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.5.2"
+  }
+}
+CONTENT_END

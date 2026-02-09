@@ -17,13 +17,44 @@ export const socialRouter = () => {
     // Tracking Routes
     router.get('/social/tracked/:instanceId', requireAuth, (req, res) => {
         const { instanceId } = req.params;
+        const instId = parseInt(instanceId);
+        const activeInstance = engineManager.getInstance(instId);
+        
         const tracked = db.prepare(`
             SELECT tc.*, c.name 
             FROM tracked_contacts tc
             LEFT JOIN contacts c ON tc.jid = c.jid AND tc.instance_id = c.instance_id
             WHERE tc.instance_id = ?
-        `).all(instanceId);
-        res.json(tracked);
+        `).all(instId);
+
+        const trackedWithPresence = tracked.map((t: any) => {
+            let presence = 'unavailable';
+            let session_start = null;
+            let duration_seconds = 0;
+
+            if (activeInstance && activeInstance.socialManager) {
+                session_start = activeInstance.socialManager.getSessionStart(t.jid);
+                if (session_start) {
+                    presence = 'available';
+                    duration_seconds = Math.floor((Date.now() - session_start) / 1000);
+                } else {
+                    // Calculate offline duration based on last seen or status transition
+                    const lastRef = t.status_since || t.last_online;
+                    if (lastRef) {
+                        duration_seconds = Math.floor((Date.now() - new Date(lastRef).getTime()) / 1000);
+                    }
+                }
+            }
+
+            return {
+                ...t,
+                presence,
+                session_duration: duration_seconds,
+                session_start: session_start ? new Date(session_start).toISOString() : null
+            };
+        });
+
+        res.json(trackedWithPresence);
     });
 
     router.post('/social/tracked', requireAuth, (req, res) => {

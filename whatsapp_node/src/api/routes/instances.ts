@@ -27,15 +27,39 @@ export const instancesRouter = () => {
                 WHERE tc.instance_id = ?
             `).all(inst.id);
 
+            const trackedWithPresence = tracked.map((t: any) => {
+                let presence = 'unavailable';
+                let session_start = null;
+                let duration_seconds = 0;
+
+                if (activeInstance && activeInstance.socialManager) {
+                    session_start = activeInstance.socialManager.getSessionStart(t.jid);
+                    if (session_start) {
+                        presence = 'available';
+                        duration_seconds = Math.floor((Date.now() - session_start) / 1000);
+                    } else {
+                        // Calculate offline duration
+                        if (t.last_online) {
+                            duration_seconds = Math.floor((Date.now() - new Date(t.last_online).getTime()) / 1000);
+                        }
+                    }
+                }
+
+                return {
+                    ...t,
+                    presence,
+                    session_duration: duration_seconds,
+                    session_start: session_start ? new Date(session_start).toISOString() : null
+                };
+            });
+
             return {
                 ...inst,
                 qr: activeInstance ? activeInstance.qr : null,
                 status: activeInstance ? activeInstance.status : inst.status,
-                tracked: tracked
+                tracked: trackedWithPresence
             };
         });
-
-        console.log('[API] GET /instances response:', JSON.stringify(instancesWithQr.map(i => ({ id: i.id, status: i.status, hasQr: !!i.qr }))));
 
         res.json(instancesWithQr);
     });

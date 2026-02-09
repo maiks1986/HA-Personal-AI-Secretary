@@ -307,7 +307,7 @@ export class WhatsAppInstance {
                     this.io, 
                     this.logger, 
                     (jids) => this.profilePictureManager?.enqueue(jids),
-                    (jid) => this.socialManager?.recordOutboundMessage(jid)
+                    (jid, direction) => this.socialManager?.recordMessageActivity(jid, direction)
                 );
                 
                 this.workerManager = new WorkerManager(

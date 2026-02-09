@@ -1,4 +1,4 @@
-import { WASocket } from '@whiskeysockets/baileys';
+import { getDb } from '../../db/database';
 
 export enum Priority {
     HIGH = 0,    // User messages, urgent UI actions
@@ -12,6 +12,7 @@ interface QueuedTask {
     resolve: (val: any) => void;
     reject: (err: any) => void;
     timestamp: number;
+    cancelled?: boolean;
 }
 
 export class TrafficManager {
@@ -23,10 +24,31 @@ export class TrafficManager {
     constructor(private instanceId: number) {}
 
     private getNextDelay(): number {
-        // Randomize delay between 80% and 150% of baseDelay
-        const min = this.baseDelay * 0.8;
-        const max = this.baseDelay * 1.5;
-        return Math.floor(Math.random() * (max - min + 1) + min);
+        let delay = this.baseDelay;
+        try {
+            const db = getDb();
+            if (db) {
+                // Warmup logic: increase delay for newer instances to prevent bans
+                const row = db.prepare('SELECT created_at FROM instances WHERE id = ?').get(this.instanceId) as any;
+                if (row && row.created_at) {
+                    const createdAt = new Date(row.created_at).getTime();
+                    const now = Date.now();
+                    const diffHours = Math.floor((now - createdAt) / (1000 * 60 * 60));
+                    if (diffHours < 48) {
+                        // Extra delay for instances under 48 hours old
+                        delay += (48 - diffHours) * 100; // Scales down as account ages
+                    }
+                }
+            }
+        } catch (e) {
+            console.error('[TrafficManager]: Failed to calculate warmup delay:', e);
+        }
+        
+        // Randomize delay between 80% and 150% of calculated delay
+        const min = delay * 0.8;
+        const max = delay * 1.5;
+        const finalDelay = Math.floor(Math.random() * (max - min + 1) + min);
+        return isNaN(finalDelay) ? this.baseDelay : finalDelay;
     }
 
     /**
@@ -53,19 +75,19 @@ export class TrafficManager {
     }
 
     /**
-     * Clears all pending tasks in the queue.
-     * Optionally filtered by priority (clears tasks at or below the given priority).
+     * Clears pending tasks.
      */
     public clearQueue(priorityThreshold: Priority = Priority.LOW) {
         const removed = this.queue.filter(t => t.priority >= priorityThreshold);
         this.queue = this.queue.filter(t => t.priority < priorityThreshold);
         
         for (const task of removed) {
-            task.reject(new Error("Queue cleared due to reconnection or shutdown"));
+            task.cancelled = true;
+            task.reject(new Error("Queue cleared"));
         }
         
         if (removed.length > 0) {
-            console.log(`[TrafficManager ${this.instanceId}]: Cleared ${removed.length} tasks from queue.`);
+            console.log(`[TrafficManager ${this.instanceId}]: Cleared ${removed.length} tasks.`);
         }
     }
 
@@ -73,44 +95,44 @@ export class TrafficManager {
         if (this.processing || this.queue.length === 0) return;
         this.processing = true;
 
-        const task = this.queue.shift()!;
-        
-        // Rate limiting: Ensure randomized delay between requests
-        const now = Date.now();
-        const timeSinceLast = now - this.lastRequestTime;
-        const currentDelay = this.getNextDelay();
-
-        if (timeSinceLast < currentDelay) {
-            await new Promise(r => setTimeout(r, currentDelay - timeSinceLast));
-        }
-
         try {
-            // console.log(`[TrafficManager ${this.instanceId}]: Executing task (Priority: ${Priority[task.priority]}, Queue size: ${this.queue.length})`);
-            const result = await task.execute();
-            this.lastRequestTime = Date.now();
-            task.resolve(result);
-        } catch (e) {
-            this.lastRequestTime = Date.now();
-            task.reject(e);
+            const task = this.queue.shift();
+            if (!task || task.cancelled) {
+                this.processing = false;
+                if (this.queue.length > 0) setImmediate(() => this.processNext());
+                return;
+            }
+            
+            const now = Date.now();
+            const timeSinceLast = now - this.lastRequestTime;
+            const currentDelay = this.getNextDelay();
+
+            if (timeSinceLast < currentDelay) {
+                await new Promise(r => setTimeout(r, currentDelay - timeSinceLast));
+            }
+
+            if (task.cancelled) {
+                this.processing = false;
+                if (this.queue.length > 0) setImmediate(() => this.processNext());
+                return;
+            }
+
+            try {
+                const result = await task.execute();
+                this.lastRequestTime = Date.now();
+                task.resolve(result);
+            } catch (e) {
+                this.lastRequestTime = Date.now();
+                task.reject(e);
+            }
         } finally {
             this.processing = false;
-            // Immediate setImmediate to avoid stack overflow but keep processing
-            setImmediate(() => this.processNext());
+            if (this.queue.length > 0) setImmediate(() => this.processNext());
         }
     }
 
-    /**
-     * Returns the current queue size. 
-     * Useful for background workers to implement adaptive delay.
-     */
-    public getQueueSize(): number {
-        return this.queue.length;
-    }
-
-    /**
-     * Recommended delay for low-priority workers based on queue congestion.
-     * @param baseDelay The standard delay in ms
-     */
+    public getQueueSize(): number { return this.queue.length; }
+    
     public getAdaptiveDelay(baseDelay: number): number {
         const size = this.queue.length;
         if (size > 20) return baseDelay * 4;

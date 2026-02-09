@@ -11,7 +11,7 @@ export class MessageManager {
         private io: any, 
         private logger: any,
         private profilePicCallback?: (jids: string[]) => void,
-        private socialCallback?: (jid: string) => void
+        private socialCallback?: (jid: string, direction: 'sent' | 'received') => void
     ) {}
 
     // --- MASS SYNC HANDLERS ---
@@ -358,8 +358,8 @@ export class MessageManager {
                     raw_message = COALESCE(excluded.raw_message, messages.raw_message)
             `).run(this.instanceId, whatsapp_id, jid, sender_jid, senderName, text, type, media_path, media_download_status, raw_message_json, latitude, longitude, vcard_data, 'sent', timestamp, is_from_me);
 
-            if (is_from_me === 1 && this.socialCallback) {
-                this.socialCallback(jid);
+            if (this.socialCallback) {
+                this.socialCallback(jid, is_from_me === 1 ? 'sent' : 'received');
             }
 
             // Save/Update Chat with Identity Name (Ensures it doesn't change to "Me" or individual sender name)
