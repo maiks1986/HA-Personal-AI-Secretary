@@ -178,7 +178,13 @@ export function initDatabase() {
         const info = db.prepare(`PRAGMA table_info(${table})`).all() as any[];
         if (!info.find(c => c.name === column)) {
             console.log(`MIGRATION: Adding column '${column}' to table '${table}'`);
-            db.prepare(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`).run();
+            // SQLite restriction: ALTER TABLE ADD COLUMN cannot use non-constant defaults like CURRENT_TIMESTAMP
+            // We strip the default if it's not a constant for the migration.
+            const migrationDef = definition.includes('DEFAULT CURRENT_TIMESTAMP') 
+                ? definition.replace('DEFAULT CURRENT_TIMESTAMP', '') 
+                : definition;
+            
+            db.prepare(`ALTER TABLE ${table} ADD COLUMN ${column} ${migrationDef}`).run();
         }
     };
 
