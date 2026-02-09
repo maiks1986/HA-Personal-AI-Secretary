@@ -37,9 +37,27 @@ This repository houses a suite of professional Home Assistant Add-ons designed t
     *   Manages JWTs and API Tokens for external access.
     *   Ensures only authorized users access the Secretary dashboards.
 
+### 5. 📝 Task Concierge (`todo_node`)
+**The Task Manager.**
+*   **Purpose:** Advanced Kanban board with AI-powered task creation.
+*   **Features:**
+    *   **AI Task Creator:** Natural language parsing via the AI Gateway.
+    *   **Public Monitor View:** High-visibility dashboard for wall-mounted tablets.
+    *   **User Sync:** Automatically maps tasks to Home Assistant household members.
+    *   **Automation Ready:** Toggle task lists based on presence or time.
+
 ---
 
 ## 🚀 Installation Guide
+>>>>>>> REPLACE
+[TOOL:PATCH README.md]
+<<<<<<< SEARCH
+    *   Install **Calendar Master** (Optional, for scheduling).
+3.  **Install the Integration:**
+=======
+    *   Install **Calendar Master** (Optional, for scheduling).
+    *   Install **Task Concierge** (For task management).
+3.  **Install the Integration:**
 
 1.  **Add the Repository:**
     *   Click the "Add to Home Assistant" button above, or manually add this repository URL to your Add-on Store.

@@ -152,18 +152,8 @@ router.post('/2fa/setup', ensureAuth, async (req: Request, res: Response) => {
     
     const secret = speakeasy.generateSecret({ name: `Identity Gate (${user.username})` });
     
-    // Save secret temporarily (or permanently but disabled)
-    // We need to update DB to store secret.
-    // For simplicity, we update the user row immediately but keep enabled=0 until verified.
-    
-    // We need a db method for this.
-    // Hack: direct DB access via exposed db instance (not ideal but quick)
-    // Better: Add updateTotpSecret to db class.
-    // db.updateTotpSecret(user.sub, secret.base32);
-    
-    // For now, I'll assume we add that method or use raw SQL here?
-    // Let's rely on adding the method to DB class in next step.
-    (db as any).updateTotpSecret(user.sub, secret.base32);
+    // Save secret temporarily. We update the user row immediately but keep enabled=0 until verified.
+    db.updateTotpSecret(user.sub, secret.base32);
 
     const qr = await QRCode.toDataURL(secret.otpauth_url!);
     
