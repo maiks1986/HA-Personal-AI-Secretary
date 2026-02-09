@@ -86,8 +86,77 @@
 
         async function fetchAccountStatus() {
             try {
-                const response = await fetch('/api/account_status');
+                const response = await fetch('api/account_status');
                 const accounts = await response.json();
+>>>>>>> REPLACE
+<<<<<<< SEARCH
+        document.getElementById('sendMessageForm').addEventListener('submit', async function (e) {
+            e.preventDefault();
+            const sender = document.getElementById('sender').value;
+            const contact = document.getElementById('contact').value;
+            const message = document.getElementById('message').value;
+
+            try {
+                const response = await fetch('/api/send_message', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+=======
+        document.getElementById('sendMessageForm').addEventListener('submit', async function (e) {
+            e.preventDefault();
+            const sender = document.getElementById('sender').value;
+            const contact = document.getElementById('contact').value;
+            const message = document.getElementById('message').value;
+
+            try {
+                const response = await fetch('api/send_message', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+>>>>>>> REPLACE
+<<<<<<< SEARCH
+        async function handleGenerateSuggestions() {
+            const btn = document.getElementById('generate-suggestions-btn');
+            const suggestionsContainer = document.getElementById('suggestions-container');
+            btn.disabled = true;
+            btn.innerText = 'Generating...';
+            suggestionsContainer.innerHTML = '';
+
+            try {
+                const response = await fetch('/api/generate_suggestions', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+=======
+        async function handleGenerateSuggestions() {
+            const btn = document.getElementById('generate-suggestions-btn');
+            const suggestionsContainer = document.getElementById('suggestions-container');
+            btn.disabled = true;
+            btn.innerText = 'Generating...';
+            suggestionsContainer.innerHTML = '';
+
+            try {
+                const response = await fetch('api/generate_suggestions', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+>>>>>>> REPLACE
+<<<<<<< SEARCH
+        async function fetchMessages() {
+            try {
+                const accountFilter = document.getElementById('account-filter').value;
+                let url = '/api/messages';
+                if (accountFilter) {
+                    url += `?account=${encodeURIComponent(accountFilter)}`;
+                }
+
+                const response = await fetch(url);
+=======
+        async function fetchMessages() {
+            try {
+                const accountFilter = document.getElementById('account-filter').value;
+                let url = 'api/messages';
+                if (accountFilter) {
+                    url += `?account=${encodeURIComponent(accountFilter)}`;
+                }
+
+                const response = await fetch(url);
                 const listDiv = document.getElementById('account-status-list');
                 const filterSelect = document.getElementById('account-filter');
                 const currentFilter = filterSelect.value;
@@ -106,10 +175,22 @@
                     const row = document.createElement('div');
                     row.className = 'account-row';
                     const statusClass = acc.status === 'online' ? 'status-online' : 'status-offline';
+                    
+                    // Display relative time for status_since if available
+                    let statusLabel = acc.status === 'online' ? 'Online' : 'Offline';
+                    if (acc.status_since) {
+                        const since = new Date(acc.status_since);
+                        const diff = Math.floor((new Date() - since) / 1000);
+                        if (diff < 60) statusLabel += ` (just now)`;
+                        else if (diff < 3600) statusLabel += ` (${Math.floor(diff/60)}m)`;
+                        else statusLabel += ` (${Math.floor(diff/3600)}h)`;
+                    }
+
                     row.innerHTML = `
                         <div>
                             <span class="status-indicator ${statusClass}"></span>
                             <strong>${acc.account}</strong>
+                            <small style="margin-left: 10px; color: #606770;">${statusLabel}</small>
                         </div>
                         <small>Last seen: ${acc.last_seen}</small>
                     `;

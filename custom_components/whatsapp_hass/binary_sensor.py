@@ -79,8 +79,10 @@ class WhatsAppContactBinarySensor(BinarySensorEntity):
         self.instance_id = instance_id
         self.jid = contact_data["jid"]
         self._contact_name = contact_data.get("name") or self.jid.split("@")[0]
+        jid_prefix = self.jid.split("@")[0]
         
-        self._attr_name = f"{self._contact_name} Online Status"
+        self._attr_name = self._contact_name
+        self.entity_id = f"binary_sensor.wa_social_{jid_prefix}"
         self._attr_unique_id = f"whatsapp_{instance_id}_{self.jid}_online"
         self._attr_device_class = BinarySensorDeviceClass.CONNECTIVITY
         self._attr_device_info = {
@@ -93,8 +95,6 @@ class WhatsAppContactBinarySensor(BinarySensorEntity):
             if inst["id"] == self.instance_id:
                 for contact in inst.get("tracked", []):
                     if contact["jid"] == self.jid:
-                        # Logic: Engine should provide 'presence' or we infer from last_online vs now
-                        # For now, assume a 'presence' field if available, else False
                         return contact.get("presence") == "available"
         return False
 
@@ -105,6 +105,8 @@ class WhatsAppContactBinarySensor(BinarySensorEntity):
                 for contact in inst.get("tracked", []):
                     if contact["jid"] == self.jid:
                         return {
+                            "contact_name": self._contact_name,
+                            "status_since": contact.get("status_since"),
                             "last_seen": contact.get("last_online"),
                             "today_duration_seconds": contact.get("today_duration"),
                             "jid": self.jid
